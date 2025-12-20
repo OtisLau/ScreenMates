@@ -12,6 +12,11 @@ xcuserdata/
 *.xccheckout
 *.xcscmblueprint
 
+# Xcode user data (more comprehensive)
+*.xcuserstate
+xcshareddata/
+*.xcscheme
+
 # Build artifacts
 build/
 DerivedData/
