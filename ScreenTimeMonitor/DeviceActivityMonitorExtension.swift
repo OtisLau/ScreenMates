@@ -1,48 +1,29 @@
-//
-//  DeviceActivityMonitorExtension.swift
-//  ScreenTimeMonitor
-//
-//  Created by Otis Lau on 2025-12-20.
-//
-
 import DeviceActivity
+import ManagedSettings
+import Foundation
+import UserNotifications
 
-// Optionally override any of the functions below.
-// Make sure that your class name matches the NSExtensionPrincipalClass in your Info.plist.
 class DeviceActivityMonitorExtension: DeviceActivityMonitor {
-    override func intervalDidStart(for activity: DeviceActivityName) {
-        super.intervalDidStart(for: activity)
-        
-        // Handle the start of the interval.
-    }
     
-    override func intervalDidEnd(for activity: DeviceActivityName) {
-        super.intervalDidEnd(for: activity)
-        
-        // Handle the end of the interval.
-    }
-    
+    // This MUST match the App Group ID you created in Signing & Capabilities
+    let suiteName = "group.com.otishlau.screenmates"
+
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
         
-        // Handle the event reaching its threshold.
-    }
-    
-    override func intervalWillStartWarning(for activity: DeviceActivityName) {
-        super.intervalWillStartWarning(for: activity)
+        print("⚠️ Extension: Threshold reached!")
         
-        // Handle the warning before the interval starts.
-    }
-    
-    override func intervalWillEndWarning(for activity: DeviceActivityName) {
-        super.intervalWillEndWarning(for: activity)
+        // 1. Save the "Limit Hit" flag to the shared mailbox
+        let sharedDefaults = UserDefaults(suiteName: suiteName)
+        sharedDefaults?.set(Date(), forKey: "LastLimitHitDate")
         
-        // Handle the warning before the interval ends.
-    }
-    
-    override func eventWillReachThresholdWarning(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
-        super.eventWillReachThresholdWarning(event, activity: activity)
+        // 2. Send a local notification (so you know it worked)
+        let content = UNMutableNotificationContent()
+        content.title = "⌛️ Time Limit Reached"
+        content.body = "You have used your screen time allowance."
+        content.sound = .default
         
-        // Handle the warning before the event reaches its threshold.
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
 }
