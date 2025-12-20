@@ -16,6 +16,7 @@ xcuserdata/
 *.xcuserstate
 xcshareddata/
 *.xcscheme
+xcschememanagement.plist
 
 # Build artifacts
 build/

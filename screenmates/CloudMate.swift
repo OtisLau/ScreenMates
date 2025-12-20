@@ -5,7 +5,7 @@ import Combine
 class CloudMate: ObservableObject {
     static let shared = CloudMate()
     
-    // REPLACE with your container ID if it's different
+    // REPLACE with your container ID if different
     let container = CKContainer(identifier: "iCloud.com.otishlau.screenmates")
     lazy var database = container.publicCloudDatabase
     
@@ -23,7 +23,7 @@ class CloudMate: ObservableObject {
         return String(newID)
     }
 
-    // 2. Upload Status
+    // 2. Upload Status (When App is Open)
     func logThresholdEvent() {
         let record = CKRecord(recordType: "ScreenEvent")
         record["timestamp"] = Date()
@@ -74,6 +74,40 @@ class CloudMate: ObservableObject {
                     self.friendStatus = "❌ Error: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+    
+    // 4. Background "Safety Net" Check
+    // This runs silently when the app is closed to upload missed violations
+    func performBackgroundCheck() async -> Bool {
+        print("🕵️‍♂️ Background Task Woke Up!")
+        
+        let sharedDefaults = UserDefaults(suiteName: "group.com.otishlau.screenmates")
+        
+        // Check if there is a pending limit event that wasn't uploaded
+        guard let lastHitDate = sharedDefaults?.object(forKey: "LastLimitHitDate") as? Date else {
+            print("💤 Nothing to report.")
+            return true // "Success" (nothing broke, just nothing to do)
+        }
+        
+        print("🚨 Found a hidden violation from: \(lastHitDate)")
+        
+        // Upload it
+        let record = CKRecord(recordType: "ScreenEvent")
+        record["timestamp"] = lastHitDate // Use the ACTUAL time it happened
+        record["eventType"] = "limit_reached"
+        record["user_id"] = myID
+        
+        do {
+            try await database.save(record)
+            print("✅ Background Upload Success!")
+            
+            // Clear the evidence so we don't upload it twice
+            sharedDefaults?.removeObject(forKey: "LastLimitHitDate")
+            return true
+        } catch {
+            print("❌ Background Upload Failed: \(error.localizedDescription)")
+            return false // Tell iOS we failed so it might retry later
         }
     }
 }

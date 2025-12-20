@@ -2,15 +2,18 @@ import SwiftUI
 import FamilyControls
 import DeviceActivity
 import UserNotifications
+import BackgroundTasks
 
 struct ContentView: View {
+    @Environment(\.scenePhase) var scenePhase
+    
     @State var selection = FamilyActivitySelection()
     @State var isPickerPresented = false
-    @State var friendIDInput: String = ""
+    
+    // Saves Friend ID permanently
+    @AppStorage("savedFriendID") var friendIDInput: String = ""
     
     @StateObject var cloudMate = CloudMate.shared
-    
-    // REPLACE with your App Group ID
     let sharedDefaults = UserDefaults(suiteName: "group.com.otishlau.screenmates")
     
     let center = AuthorizationCenter.shared
@@ -80,7 +83,7 @@ struct ContentView: View {
                     Button("Select Apps") { isPickerPresented = true }
                         .buttonStyle(.bordered)
                     
-                    Button("Start Tracking (15 min)") { startMonitoring() }
+                    Button("Start Tracking (1 Min Test)") { startMonitoring() }
                         .buttonStyle(.borderedProminent)
                         .disabled(selection.applicationTokens.isEmpty && selection.categoryTokens.isEmpty)
                 }
@@ -90,11 +93,38 @@ struct ContentView: View {
         .onAppear {
             setupPermissions()
             checkForAndUploadEvents()
+            
+            // Auto-check friend on launch
+            if !friendIDInput.isEmpty {
+                cloudMate.checkFriendStatus(friendCode: friendIDInput)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             checkForAndUploadEvents()
+            // Auto-check friend on return
+            if !friendIDInput.isEmpty {
+                cloudMate.checkFriendStatus(friendCode: friendIDInput)
+            }
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .background {
+                scheduleAppRefresh()
+            }
         }
         .familyActivityPicker(isPresented: $isPickerPresented, selection: $selection)
+    }
+    
+    // Helper: Schedule Background Task
+    func scheduleAppRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: "com.otishlau.screenmates.refresh")
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            print("✅ Safety Net Scheduled")
+        } catch {
+            print("❌ Could not schedule background task: \(error)")
+        }
     }
     
     var statusColor: Color {
@@ -123,7 +153,7 @@ struct ContentView: View {
             intervalEnd: DateComponents(hour: 23, minute: 59),
             repeats: true
         )
-        // 15 Minute Limit
+        
         let event = DeviceActivityEvent(
             applications: selection.applicationTokens,
             categories: selection.categoryTokens,

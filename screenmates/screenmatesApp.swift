@@ -1,17 +1,17 @@
-//
-//  screenmatesApp.swift
-//  screenmates
-//
-//  Created by Otis Lau on 2025-12-20.
-//
-
 import SwiftUI
+import BackgroundTasks
 
 @main
-struct screenmatesApp: App {
+struct ScreenMatesApp: App {
+    @StateObject var cloudMate = CloudMate.shared
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+        }
+        // This listens for the system wake-up call
+        .backgroundTask(.appRefresh("com.otishlau.screenmates.refresh")) {
+            let success = await cloudMate.performBackgroundCheck()
         }
     }
 }

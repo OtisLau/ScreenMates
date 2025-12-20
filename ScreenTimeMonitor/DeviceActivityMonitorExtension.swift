@@ -5,7 +5,7 @@ import UserNotifications
 
 class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     
-    // This MUST match the App Group ID you created in Signing & Capabilities
+    // MAKE SURE THIS MATCHES YOUR APP GROUP EXACTLY
     let suiteName = "group.com.otishlau.screenmates"
 
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
@@ -13,14 +13,14 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         
         print("⚠️ Extension: Threshold reached!")
         
-        // 1. Save the "Limit Hit" flag to the shared mailbox
+        // 1. Save the "Limit Hit" flag to the shared mailbox so the main app finds it later
         let sharedDefaults = UserDefaults(suiteName: suiteName)
         sharedDefaults?.set(Date(), forKey: "LastLimitHitDate")
         
-        // 2. Send a local notification (so you know it worked)
+        // 2. Send a notification to wake the user up
         let content = UNMutableNotificationContent()
         content.title = "⌛️ Time Limit Reached"
-        content.body = "You have used your screen time allowance."
+        content.body = "Time's up! Tap here to sync your status with friends."
         content.sound = .default
         
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
