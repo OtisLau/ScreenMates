@@ -9,7 +9,6 @@ struct ScreenMatesApp: App {
         WindowGroup {
             ContentView()
         }
-        // This listens for the system wake-up call
         .backgroundTask(.appRefresh("com.otishlau.screenmates.refresh")) {
             let success = await cloudMate.performBackgroundCheck()
         }
