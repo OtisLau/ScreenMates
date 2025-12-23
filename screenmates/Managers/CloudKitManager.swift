@@ -1,6 +1,9 @@
 import CloudKit
 import SwiftUI
 import Combine
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 /// Manages all CloudKit operations with error handling, caching, and retry logic
 class CloudKitManager: ObservableObject {
@@ -58,6 +61,7 @@ class CloudKitManager: ObservableObject {
         sharedDefaults?.set(myID, forKey: AppConstants.Keys.sharedUserID)
         sharedDefaults?.set(myDisplayName, forKey: AppConstants.Keys.sharedDisplayName)
         sharedDefaults?.set(myGroupID, forKey: AppConstants.Keys.sharedGroupID)
+        sharedDefaults?.set(AppConstants.currentBlockSize, forKey: AppConstants.Keys.sharedBlockSizeMinutes)
     }
 
     // MARK: - CloudKit Subscriptions (silent pushes)
@@ -693,6 +697,10 @@ class CloudKitManager: ObservableObject {
         if let encoded = try? JSONEncoder().encode(groupMembers) {
             sharedDefaults?.set(encoded, forKey: AppConstants.Keys.cachedLeaderboardData)
         }
+
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadTimelines(ofKind: "ScreenMatesGroupWidget")
+        #endif
     }
     
     private func loadCachedData() {

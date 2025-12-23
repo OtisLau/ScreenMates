@@ -48,5 +48,8 @@ struct AppConstants {
 
         // Group config mirrored into App Group so the extension can use the current daily goal.
         static let sharedDailyGoalBlocks = "SharedDailyGoalBlocks"
+
+        // Display config mirrored into App Group so widgets can show minutes correctly.
+        static let sharedBlockSizeMinutes = "SharedBlockSizeMinutes"
     }
 }

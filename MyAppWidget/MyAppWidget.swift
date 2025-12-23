@@ -7,82 +7,120 @@
 
 import WidgetKit
 import SwiftUI
+import Foundation
 
-struct Provider: AppIntentTimelineProvider {
+private enum WidgetConstants {
+    static let kind = "ScreenMatesGroupWidget"
+    static let appGroupSuite = "group.com.otishlau.screenmates"
+    static let cachedLeaderboardKey = "CachedLeaderboardData"
+    static let blockSizeKey = "SharedBlockSizeMinutes"
+}
+
+struct CachedMember: Codable, Identifiable {
+    let id: String
+    let userID: String
+    let displayName: String
+    let blocks: Int
+    let streak: Int
+    let lastUpdate: Date
+}
+
+struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: ConfigurationAppIntent())
+        SimpleEntry(date: Date(), members: [
+            .init(id: "A", userID: "A", displayName: "You", blocks: 12, streak: 2, lastUpdate: .now),
+            .init(id: "B", userID: "B", displayName: "Josh", blocks: 9, streak: 1, lastUpdate: .now),
+            .init(id: "C", userID: "C", displayName: "Yanic", blocks: 3, streak: 0, lastUpdate: .now),
+        ], blockSizeMinutes: 1)
     }
 
-    func snapshot(for configuration: ConfigurationAppIntent, in context: Context) async -> SimpleEntry {
-        SimpleEntry(date: Date(), configuration: configuration)
+    func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
+        completion(loadEntry())
     }
-    
-    func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
-        var entries: [SimpleEntry] = []
 
-        // Generate a timeline consisting of five entries an hour apart, starting from the current date.
-        let currentDate = Date()
-        for hourOffset in 0 ..< 5 {
-            let entryDate = Calendar.current.date(byAdding: .hour, value: hourOffset, to: currentDate)!
-            let entry = SimpleEntry(date: entryDate, configuration: configuration)
-            entries.append(entry)
+    func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
+        let entry = loadEntry()
+        // Refresh periodically; the app will also explicitly reload timelines when it caches new data.
+        let next = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date().addingTimeInterval(900)
+        completion(Timeline(entries: [entry], policy: .after(next)))
+    }
+
+    private func loadEntry() -> SimpleEntry {
+        let defaults = UserDefaults(suiteName: WidgetConstants.appGroupSuite)
+        let blockSize = defaults?.integer(forKey: WidgetConstants.blockSizeKey) ?? 0
+        let blockSizeMinutes = blockSize > 0 ? blockSize : 1
+
+        var members: [CachedMember] = []
+        if let data = defaults?.data(forKey: WidgetConstants.cachedLeaderboardKey) {
+            members = (try? JSONDecoder().decode([CachedMember].self, from: data)) ?? []
         }
 
-        return Timeline(entries: entries, policy: .atEnd)
-    }
+        // Only show a small list for the small widget.
+        members = Array(members.prefix(4))
 
-//    func relevances() async -> WidgetRelevances<ConfigurationAppIntent> {
-//        // Generate a list containing the contexts this widget is relevant in.
-//    }
+        return SimpleEntry(date: Date(), members: members, blockSizeMinutes: blockSizeMinutes)
+    }
 }
 
 struct SimpleEntry: TimelineEntry {
     let date: Date
-    let configuration: ConfigurationAppIntent
+    let members: [CachedMember]
+    let blockSizeMinutes: Int
 }
 
 struct MyAppWidgetEntryView : View {
     var entry: Provider.Entry
 
     var body: some View {
-        VStack {
-            Text("Time:")
-            Text(entry.date, style: .time)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("ScreenMates")
+                .font(.headline)
 
-            Text("Favorite Emoji:")
-            Text(entry.configuration.favoriteEmoji)
+            if entry.members.isEmpty {
+                Text("Open the app to sync your group.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(entry.members) { m in
+                        HStack {
+                            Text(m.displayName)
+                                .font(.caption)
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text("\(m.blocks * entry.blockSizeMinutes) min")
+                                .font(.caption)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 struct MyAppWidget: Widget {
-    let kind: String = "MyAppWidget"
+    let kind: String = WidgetConstants.kind
 
     var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: kind, intent: ConfigurationAppIntent.self, provider: Provider()) { entry in
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
             MyAppWidgetEntryView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-    }
-}
-
-extension ConfigurationAppIntent {
-    fileprivate static var smiley: ConfigurationAppIntent {
-        let intent = ConfigurationAppIntent()
-        intent.favoriteEmoji = "😀"
-        return intent
-    }
-    
-    fileprivate static var starEyes: ConfigurationAppIntent {
-        let intent = ConfigurationAppIntent()
-        intent.favoriteEmoji = "🤩"
-        return intent
+        .configurationDisplayName("Group Leaderboard")
+        .description("Shows your ScreenMates group and their screen time.")
+        .supportedFamilies([.systemSmall])
     }
 }
 
 #Preview(as: .systemSmall) {
     MyAppWidget()
 } timeline: {
-    SimpleEntry(date: .now, configuration: .smiley)
-    SimpleEntry(date: .now, configuration: .starEyes)
+    SimpleEntry(date: .now, members: [
+        .init(id: "A", userID: "A", displayName: "You", blocks: 12, streak: 2, lastUpdate: .now),
+        .init(id: "B", userID: "B", displayName: "Josh", blocks: 9, streak: 1, lastUpdate: .now),
+        .init(id: "C", userID: "C", displayName: "Yanic", blocks: 3, streak: 0, lastUpdate: .now),
+    ], blockSizeMinutes: 1)
 }
