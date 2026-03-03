@@ -511,9 +511,12 @@ class CloudKitManager: ObservableObject {
     // Zero out this user's block count locally and push 0 to CloudKit immediately.
     // Useful in debug mode to wipe stale data before a fresh test run.
     func resetMyCountToZero(completion: (() -> Void)? = nil) {
-        // Zero the counter — the extension increments by 1 per new threshold, so this is enough.
-        // LastThresholdIndex is left alone so duplicate detection keeps working.
+        // Zero both the display counter and the threshold index.
+        // Resetting LastThresholdIndex means the next block that fires (even a high-numbered one)
+        // will be treated as new and get counted. iOS won't replay old events unless monitoring
+        // is restarted, so this is safe to do without triggering a flood of replays.
         sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
+        sharedDefaults?.set(0, forKey: "LastThresholdIndex")
         // Remove the upload throttle timestamps so the extension uploads on the very next threshold
         sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")
         sharedDefaults?.removeObject(forKey: "LastExtensionCloudUploadAttempt")
