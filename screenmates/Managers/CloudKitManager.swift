@@ -52,13 +52,15 @@ class CloudKitManager: ObservableObject {
         mirrorIdentityToAppGroup()
     }
 
-    // Copy identity into shared App Group storage so the background extension can read it
-    // (extensions can't access @AppStorage directly).
+    // Copy identity and config into shared App Group storage so the background extension can read it
+    // (extensions can't access @AppStorage or AppConstants from the main app target directly).
     private func mirrorIdentityToAppGroup() {
         sharedDefaults?.set(myID, forKey: AppConstants.Keys.sharedUserID)
         sharedDefaults?.set(myDisplayName, forKey: AppConstants.Keys.sharedDisplayName)
         sharedDefaults?.set(myGroupID, forKey: AppConstants.Keys.sharedGroupID)
         sharedDefaults?.set(AppConstants.currentBlockSize, forKey: AppConstants.Keys.sharedBlockSizeMinutes)
+        // Mirror the upload throttle so the extension uses the same test/prod timing as the main app
+        sharedDefaults?.set(AppConstants.uploadThrottleSeconds, forKey: AppConstants.Keys.sharedUploadThrottle)
     }
 
     // MARK: - CloudKit Subscriptions

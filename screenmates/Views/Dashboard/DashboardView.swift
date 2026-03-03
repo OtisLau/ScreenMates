@@ -7,8 +7,9 @@ struct DashboardView: View {
 
     @State private var showingSettings = false
 
-    // Refresh the group data every 60 seconds in the foreground
-    let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    // Refresh the group data on a timer while the app is open.
+    // Interval is controlled by AppConstants — shorter in test mode, longer in production.
+    let timer = Timer.publish(every: AppConstants.dashboardRefreshInterval, on: .main, in: .common).autoconnect()
 
     // How many minutes the current user has used their phone today
     private var myMinutesUsed: Int {

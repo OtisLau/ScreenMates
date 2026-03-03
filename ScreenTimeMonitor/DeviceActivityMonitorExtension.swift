@@ -8,8 +8,14 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     let suiteName = "group.com.otishlau.screenmates"
     private let cloudContainerID = "iCloud.com.otishlau.screenmates"
-    private let uploadThrottleSeconds: TimeInterval = 3600
     private let maxDailyCheckpoints: Int = 96
+
+    // The extension can't import AppConstants from the main app, so the main app mirrors
+    // the upload throttle value into App Group storage. We read it here and fall back to
+    // 30 minutes if it hasn't been set yet (i.e. app hasn't been opened once since install).
+    private var uploadThrottleSeconds: TimeInterval {
+        UserDefaults(suiteName: suiteName)?.double(forKey: "SharedUploadThrottleSeconds").nonZero ?? (30 * 60)
+    }
 
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
@@ -133,4 +139,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let suffix = raw.dropFirst("block_".count)
         return Int(suffix)
     }
+}
+
+// Helper so we can fall back when a stored Double is 0 (i.e. key was never set)
+private extension Double {
+    var nonZero: Double? { self == 0 ? nil : self }
 }
