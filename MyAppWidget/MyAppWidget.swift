@@ -7,6 +7,7 @@ private enum WidgetConstants {
     static let kind = "ScreenMatesGroupWidget"
     static let appGroupSuite = "group.com.otishlau.screenmates"
     static let cachedLeaderboardKey = "CachedLeaderboardData"
+    static let blockSizeKey = "SharedBlockSizeMinutes" // written by main app on launch
 }
 
 // What we store for each person in the cached leaderboard
@@ -14,12 +15,12 @@ struct CachedMember: Codable, Identifiable {
     let id: String
     let userID: String
     let displayName: String
-    let blocks: Int         // number of 15-min blocks used today
+    let blocks: Int      // raw block count — multiply by blockSize to get minutes
     let lastUpdate: Date
 
-    // Convert blocks to a human-readable time string like "1h 15min" or "45min"
-    var formattedTime: String {
-        let totalMinutes = blocks * 15
+    // Format minutes into "1h 15min" or "45min" etc.
+    func formattedTime(blockSize: Int) -> String {
+        let totalMinutes = blocks * blockSize
         let hours = totalMinutes / 60
         let minutes = totalMinutes % 60
 
@@ -37,8 +38,7 @@ struct CachedMember: Codable, Identifiable {
 struct Provider: TimelineProvider {
 
     func placeholder(in context: Context) -> SimpleEntry {
-        // Placeholder shown while the widget loads for the first time
-        SimpleEntry(date: Date(), members: [])
+        SimpleEntry(date: Date(), members: [], blockSizeMinutes: 15)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
@@ -48,29 +48,32 @@ struct Provider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
         let entry = loadEntry()
         // Self-refresh every 15 minutes as a fallback.
-        // The main app also calls WidgetCenter.reloadTimelines() whenever fresh data arrives,
-        // so in practice the widget updates much more frequently than this.
+        // The main app and extension also call WidgetCenter.reloadTimelines() when new data arrives.
         let nextRefresh = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date().addingTimeInterval(900)
         completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
     }
 
-    // Read the group member list from the shared App Group storage the main app writes to
+    // Read group members and block size from the shared App Group storage
     private func loadEntry() -> SimpleEntry {
         let defaults = UserDefaults(suiteName: WidgetConstants.appGroupSuite)
-        var members: [CachedMember] = []
 
+        // Read the block size the main app mirrored in (1 in test mode, 15 in production)
+        let storedBlockSize = defaults?.integer(forKey: WidgetConstants.blockSizeKey) ?? 0
+        let blockSize = storedBlockSize > 0 ? storedBlockSize : 15 // fall back to production size
+
+        var members: [CachedMember] = []
         if let data = defaults?.data(forKey: WidgetConstants.cachedLeaderboardKey) {
             members = (try? JSONDecoder().decode([CachedMember].self, from: data)) ?? []
         }
 
-        // Only show the first 4 people — widget space is limited
-        return SimpleEntry(date: Date(), members: Array(members.prefix(4)))
+        return SimpleEntry(date: Date(), members: Array(members.prefix(4)), blockSizeMinutes: blockSize)
     }
 }
 
 struct SimpleEntry: TimelineEntry {
     let date: Date
     let members: [CachedMember]
+    let blockSizeMinutes: Int  // passed through so the view can convert blocks → minutes correctly
 }
 
 // The actual widget UI
@@ -85,7 +88,6 @@ struct MyAppWidgetEntryView: View {
                 .foregroundStyle(.secondary)
 
             if entry.members.isEmpty {
-                // Shown before anyone has joined a group or synced data
                 Text("Open the app to get started.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -97,7 +99,7 @@ struct MyAppWidgetEntryView: View {
                             .font(.caption)
                             .lineLimit(1)
                         Spacer(minLength: 8)
-                        Text(member.formattedTime)
+                        Text(member.formattedTime(blockSize: entry.blockSizeMinutes))
                             .font(.caption)
                             .bold()
                             .monospacedDigit()

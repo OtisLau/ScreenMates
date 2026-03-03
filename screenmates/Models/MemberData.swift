@@ -8,7 +8,7 @@ struct MemberData: Identifiable, Codable {
     let id: String
     let userID: String
     let displayName: String
-    let blocks: Int         // number of 15-min blocks used today
+    let blocks: Int         // number of blocks used today (block size depends on test vs production mode)
     let lastUpdate: Date    // when this data was last synced
 
     init(id: String? = nil, userID: String, displayName: String, blocks: Int, lastUpdate: Date) {
@@ -19,8 +19,10 @@ struct MemberData: Identifiable, Codable {
         self.lastUpdate = lastUpdate
     }
 
-    // How many minutes of screen time this person has used today
+    // How many minutes of screen time this person has used today.
+    // Uses AppConstants.currentBlockSize so test mode (1 min blocks) and
+    // production (15 min blocks) both display correctly.
     var minutesUsed: Int {
-        blocks * 15 // production block size is 15 minutes
+        blocks * AppConstants.currentBlockSize
     }
 }
