@@ -171,7 +171,11 @@ struct OnboardingView: View {
                 events: events
             )
             print("✅ Monitoring Started with \(events.count) Checkpoints")
-            
+
+            // Persist the selection so MonitoringManager can restart monitoring later
+            // (e.g. from the debug menu after exhausting the daily event limit in test mode)
+            MonitoringManager.shared.saveSelection(selection)
+
             // Mark setup as done
             cloudManager.isSetupDone = true
             isStartingMonitoring = false

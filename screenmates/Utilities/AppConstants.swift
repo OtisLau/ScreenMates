@@ -22,9 +22,11 @@ struct AppConstants {
     static let productionBlockSize = 15  // minutes
     static let currentBlockSize    = isTestMode ? testModeBlockSize : productionBlockSize
 
-    // Apple caps the number of DeviceActivity threshold events you can register per day.
-    // 96 events × 15 min = 1440 min = exactly 24 hours, so this is the sweet spot.
-    static let maxDailyCheckpoints = 96
+    // In production: 96 events × 15 min = 1440 min = exactly 24 hours.
+    // In test mode: one event per minute so the extension can fire every minute all day.
+    // Note: Apple's limit is undocumented but believed to be around 96–1440 events; runtime
+    // errors from startMonitoring() are caught gracefully in onboarding.
+    static let maxDailyCheckpoints = isTestMode ? (24 * 60) : 96
 
     // MARK: - Timing
     // How often the extension is allowed to upload your data to CloudKit after a threshold fires.

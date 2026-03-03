@@ -8,6 +8,7 @@ struct DebugMenuView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var isResetting = false
+    @State private var isRestarting = false
 
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
 
@@ -141,6 +142,23 @@ struct DebugMenuView: View {
                     } label: {
                         Label("Force Refresh Now", systemImage: "arrow.triangle.2.circlepath")
                     }
+
+                    // Re-registers monitoring events starting after the last threshold that fired.
+                    // Use this when the daily event limit is exhausted and the extension goes silent.
+                    Button {
+                        isRestarting = true
+                        DispatchQueue.global().async {
+                            MonitoringManager.shared.restartMonitoring()
+                            DispatchQueue.main.async { isRestarting = false }
+                        }
+                    } label: {
+                        if isRestarting {
+                            Label("Restarting…", systemImage: "hourglass")
+                        } else {
+                            Label("Restart Monitoring", systemImage: "play.circle")
+                        }
+                    }
+                    .disabled(isRestarting)
 
                     // Zeros your local block count and immediately uploads 0 to CloudKit.
                     // Use this before a test run to clear yesterday's leftover data.
