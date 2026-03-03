@@ -511,13 +511,8 @@ class CloudKitManager: ObservableObject {
     // Zero out this user's block count locally and push 0 to CloudKit immediately.
     // Useful in debug mode to wipe stale data before a fresh test run.
     func resetMyCountToZero(completion: (() -> Void)? = nil) {
-        // Snapshot the current threshold index so the extension can subtract it as an offset.
-        // This means the next block event (e.g. block_33) will display as 33 - 32 = 1, not 33.
-        // We deliberately leave LastThresholdIndex alone — the extension needs it to filter duplicates.
-        let currentIndex = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
-        sharedDefaults?.set(currentIndex, forKey: "BlockResetOffset")
-
-        // Clear the local counter
+        // Zero the counter — the extension increments by 1 per new threshold, so this is enough.
+        // LastThresholdIndex is left alone so duplicate detection keeps working.
         sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
         // Remove the upload throttle timestamps so the extension uploads on the very next threshold
         sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")

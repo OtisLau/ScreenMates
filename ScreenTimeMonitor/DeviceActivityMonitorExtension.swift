@@ -31,23 +31,20 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         if !Calendar.current.isDateInToday(lastDate) {
             sharedDefaults.set(0, forKey: "DailyBlocksUsed")
             sharedDefaults.set(0, forKey: "LastThresholdIndex")
-            sharedDefaults.set(0, forKey: "BlockResetOffset") // clear any manual reset offset at midnight
         }
 
         // 2. Update the block count
-        // The event name is "block_N" — treat it as "you have reached at least N blocks today",
-        // NOT "+1 every callback" (iOS can fire duplicates, especially after monitoring starts).
+        // Use LastThresholdIndex to filter out duplicate/replayed callbacks from iOS,
+        // but increment by 1 rather than using the raw threshold number.
+        // This means DailyBlocksUsed is always a clean "blocks since last reset" count,
+        // so zeroing DailyBlocksUsed is all a reset needs to do.
         let thresholdIndex = parseThresholdIndex(from: event.rawValue) ?? 0
         let lastIndex = sharedDefaults.integer(forKey: "LastThresholdIndex")
 
         var currentBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
         if thresholdIndex > 0 {
             if thresholdIndex > lastIndex {
-                // Subtract the reset offset so that after a manual reset the count
-                // starts from 0 again instead of jumping to the raw threshold number.
-                // e.g. block_33 with offset 32 → 1 block displayed.
-                let resetOffset = sharedDefaults.integer(forKey: "BlockResetOffset")
-                currentBlocks = max(0, thresholdIndex - resetOffset)
+                currentBlocks += 1
                 sharedDefaults.set(thresholdIndex, forKey: "LastThresholdIndex")
             } else {
                 // Duplicate / out-of-order callback — ignore
