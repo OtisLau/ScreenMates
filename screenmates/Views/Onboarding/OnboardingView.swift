@@ -5,8 +5,7 @@ import DeviceActivity
 /// Initial onboarding for permissions and app selection
 struct OnboardingView: View {
     @StateObject var cloudManager = CloudKitManager.shared
-    @StateObject var notificationManager = NotificationManager.shared
-    
+
     @State private var selection = FamilyActivitySelection()
     @State private var isPickerPresented = false
     @State private var permissionGranted = false
@@ -129,8 +128,6 @@ struct OnboardingView: View {
                 }
             }
             
-            // Request Notifications
-            _ = await notificationManager.requestPermission()
         }
     }
     
