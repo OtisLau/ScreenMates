@@ -31,6 +31,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         if !Calendar.current.isDateInToday(lastDate) {
             sharedDefaults.set(0, forKey: "DailyBlocksUsed")
             sharedDefaults.set(0, forKey: "LastThresholdIndex")
+            sharedDefaults.set(0, forKey: "BlockResetOffset") // clear any manual reset offset at midnight
         }
 
         // 2. Update the block count
@@ -42,7 +43,11 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         var currentBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
         if thresholdIndex > 0 {
             if thresholdIndex > lastIndex {
-                currentBlocks = max(currentBlocks, thresholdIndex)
+                // Subtract the reset offset so that after a manual reset the count
+                // starts from 0 again instead of jumping to the raw threshold number.
+                // e.g. block_33 with offset 32 → 1 block displayed.
+                let resetOffset = sharedDefaults.integer(forKey: "BlockResetOffset")
+                currentBlocks = max(0, thresholdIndex - resetOffset)
                 sharedDefaults.set(thresholdIndex, forKey: "LastThresholdIndex")
             } else {
                 // Duplicate / out-of-order callback — ignore
