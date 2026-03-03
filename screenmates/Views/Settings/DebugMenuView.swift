@@ -160,6 +160,15 @@ struct DebugMenuView: View {
                     }
                     .disabled(isRestarting)
 
+                    // Sends the app back to onboarding so you can re-select apps and re-register
+                    // DeviceActivity monitoring. Use this after a fresh build wipes the registration.
+                    // Your username and group ID are preserved — just pick apps and tap Save & Continue.
+                    Button(role: .destructive) {
+                        cloudManager.isSetupDone = false
+                    } label: {
+                        Label("Re-run App Setup", systemImage: "arrow.uturn.backward")
+                    }
+
                     // Zeros your local block count and immediately uploads 0 to CloudKit.
                     // Use this before a test run to clear yesterday's leftover data.
                     Button(role: .destructive) {
