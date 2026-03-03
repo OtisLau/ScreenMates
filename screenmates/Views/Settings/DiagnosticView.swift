@@ -190,7 +190,6 @@ struct DiagnosticView: View {
                 // Now try to fetch
                 if !self.cloudManager.myGroupID.isEmpty {
                     self.diagnosticResult += "\nFetching group data...\n"
-                    self.cloudManager.fetchGroupDetails()
                     self.cloudManager.fetchGroupData(useCache: false)
                     
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {

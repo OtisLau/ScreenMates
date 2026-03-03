@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout -b core-func)",
+      "Bash(xcodebuild -project /Users/otis/projects/screenmates/screenmates.xcodeproj -scheme screenmates -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY=\"\" CODE_SIGNING_REQUIRED=NO build)"
+    ]
+  }
+}
