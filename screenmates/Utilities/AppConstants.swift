@@ -28,9 +28,11 @@ struct AppConstants {
 
     // MARK: - Timing
     // How often the extension is allowed to upload your data to CloudKit after a threshold fires.
-    // Short in test mode so you see changes quickly; longer in production to save battery and API quota.
-    static let testModeUploadThrottle:   TimeInterval = 30      // 30 seconds
-    static let productionUploadThrottle: TimeInterval = 30 * 60 // 30 minutes
+    // This needs to be LESS than the block size (15 min) so every threshold results in an upload.
+    // We use 5 min as a safe buffer — short enough to upload on every 15-min block,
+    // but long enough to ignore any duplicate callbacks iOS fires in quick succession.
+    static let testModeUploadThrottle:   TimeInterval = 30     // 30 seconds (fast for testing)
+    static let productionUploadThrottle: TimeInterval = 5 * 60 // 5 minutes (uploads on every 15-min block)
     static let uploadThrottleSeconds = isTestMode ? testModeUploadThrottle : productionUploadThrottle
 
     // How often the dashboard auto-refreshes while the app is open.
