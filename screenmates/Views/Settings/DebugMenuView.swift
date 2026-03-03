@@ -7,6 +7,8 @@ struct DebugMenuView: View {
     @StateObject var cloudManager = CloudKitManager.shared
     @Environment(\.dismiss) var dismiss
 
+    @State private var isResetting = false
+
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
 
     // Last time the extension successfully uploaded to CloudKit
@@ -139,6 +141,22 @@ struct DebugMenuView: View {
                     } label: {
                         Label("Force Refresh Now", systemImage: "arrow.triangle.2.circlepath")
                     }
+
+                    // Zeros your local block count and immediately uploads 0 to CloudKit.
+                    // Use this before a test run to clear yesterday's leftover data.
+                    Button(role: .destructive) {
+                        isResetting = true
+                        cloudManager.resetMyCountToZero {
+                            isResetting = false
+                        }
+                    } label: {
+                        if isResetting {
+                            Label("Resetting…", systemImage: "hourglass")
+                        } else {
+                            Label("Reset My Count to 0", systemImage: "arrow.counterclockwise")
+                        }
+                    }
+                    .disabled(isResetting)
                 }
             }
             .navigationTitle("Debug")

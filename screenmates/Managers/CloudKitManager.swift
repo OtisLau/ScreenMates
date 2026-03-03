@@ -508,6 +508,50 @@ class CloudKitManager: ObservableObject {
         Task { @MainActor in await refreshGroupNow(reason: "manual") }
     }
 
+    // Zero out this user's block count locally and push 0 to CloudKit immediately.
+    // Useful in debug mode to wipe stale data before a fresh test run.
+    func resetMyCountToZero(completion: (() -> Void)? = nil) {
+        // Clear the local counter the extension reads and increments
+        sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
+        // Remove the upload throttle timestamp so the extension uploads on the very next threshold
+        sharedDefaults?.removeObject(forKey: "LastExtensionCloudUploadAttempt")
+
+        print("🔄 Reset local block count to 0 — uploading to CloudKit...")
+
+        // Push 0 blocks to CloudKit right now so friends see the reset instantly
+        database.fetch(withRecordID: myUserProfileRecordID) { record, error in
+            let profileRecord: CKRecord
+            if let record {
+                profileRecord = record
+            } else {
+                // No existing record — create a fresh one
+                profileRecord = CKRecord(recordType: "UserProfile", recordID: self.myUserProfileRecordID)
+            }
+
+            profileRecord["user_id"]          = self.myID
+            profileRecord["display_name"]     = self.myDisplayName
+            profileRecord["group_id"]         = self.myGroupID
+            profileRecord["blocks_used"]      = 0
+            profileRecord["last_updated"]     = Date()
+            profileRecord["last_active_date"] = Date()
+
+            self.database.save(profileRecord) { _, saveError in
+                DispatchQueue.main.async {
+                    if let saveError {
+                        print("❌ Reset upload failed: \(saveError.localizedDescription)")
+                    } else {
+                        print("✅ Reset uploaded to CloudKit")
+                    }
+                    // Refresh the group so the UI reflects the new 0 immediately
+                    Task { @MainActor in
+                        await self.refreshGroupNow(reason: "reset")
+                        completion?()
+                    }
+                }
+            }
+        }
+    }
+
     func resetAllData() {
         myGroupID = ""
         myDisplayName = ""
