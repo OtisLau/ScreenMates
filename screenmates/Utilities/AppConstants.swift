@@ -14,6 +14,9 @@ struct AppConstants {
     // It controls block size, how often the extension uploads, and how often the dashboard refreshes.
     static let isTestMode = true
 
+    // 0:00 -> 23:59 = 1439 total threshold minutes in a day.
+    static let maxThresholdMinuteOfDay = (24 * 60) - 1
+
     // MARK: - Block Size
     // One "block" = this many minutes of screen time.
     // In test mode we use 1 min blocks for quick end-to-end verification.
@@ -23,10 +26,15 @@ struct AppConstants {
     static let productionBlockSize = 15  // minutes
     static let currentBlockSize    = isTestMode ? testModeBlockSize : productionBlockSize
 
-    // In production: 96 events × 15 min = 1440 min = exactly 24 hours.
-    // In test mode we intentionally cap to 20 events for fast feedback.
-    static let testModeMaxDailyCheckpoints = 20
-    static let maxDailyCheckpoints = isTestMode ? testModeMaxDailyCheckpoints : 96
+    // How many events to register per monitoring session/batch.
+    // In test mode we keep this small for quick iteration.
+    static let testModeEventsPerBatch = 20
+    static let productionEventsPerBatch = 96
+    static let eventsPerMonitoringBatch = isTestMode ? testModeEventsPerBatch : productionEventsPerBatch
+
+    // Absolute ceiling for thresholds/blocks in one day based on block size.
+    // This is separate from eventsPerMonitoringBatch.
+    static let maxTrackableBlocksPerDay = thresholdEventsPerDay(for: currentBlockSize)
 
     // Heuristic for "all categories selected" in FamilyActivityPicker.
     // If apps/domains are empty and category token count reaches this value,
@@ -69,10 +77,15 @@ struct AppConstants {
         // Config values mirrored into App Group so the extension and widget can read them
         static let sharedBlockSizeMinutes   = "SharedBlockSizeMinutes"
         static let sharedUploadThrottle     = "SharedUploadThrottleSeconds" // extension reads this
-        static let sharedMaxDailyCheckpoints = "SharedMaxDailyCheckpoints"  // extension reads this
 
         // Written by OnboardingView just before startMonitoring() so the extension can
         // distinguish "iOS replay of old events" from "new usage after setup."
         static let monitoringSetupTimestamp = "MonitoringSetupTimestamp"
+    }
+
+    static func thresholdEventsPerDay(for blockSize: Int) -> Int {
+        guard blockSize > 0 else { return 0 }
+        // ceil(maxThresholdMinuteOfDay / blockSize) without floating point.
+        return (maxThresholdMinuteOfDay + blockSize - 1) / blockSize
     }
 }

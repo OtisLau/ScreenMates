@@ -3,7 +3,7 @@ import DeviceActivity
 import FamilyControls
 
 // Handles saving the app selection from onboarding and restarting monitoring mid-session.
-// Useful in test mode when the daily 96-event cap is exhausted and you need to keep testing.
+// Useful in test mode when the current event batch is exhausted and you need to keep testing.
 class MonitoringManager {
     static let shared = MonitoringManager()
     private init() {}
@@ -34,8 +34,8 @@ class MonitoringManager {
     }
 
     // Re-register monitoring with a fresh batch of events starting after the last threshold
-    // that already fired. This lets you continue testing after hitting the 96-event ceiling
-    // without iOS immediately replaying already-exceeded thresholds.
+    // that already fired. This lets testing continue after a batch is exhausted without
+    // wiping already-counted usage.
     //
     // e.g. if LastThresholdIndex = 96, new events are block_97…block_192 at minutes 97…192.
     // Since your current usage is ~96 min, block_97 hasn't fired yet → extension wakes on next use.
@@ -46,17 +46,17 @@ class MonitoringManager {
             return
         }
 
-        // If the last block was recorded on a previous day, reset the index so we start
-        // fresh from block_1 — otherwise lastIndex near the daily ceiling would produce
-        // zero events and leave monitoring permanently dead until a manual re-onboard.
+        // If the last block was recorded on a previous day, reset the index and local count
+        // so the new day starts from block_1 with a clean baseline.
         let lastBlockDate = sharedDefaults?.object(forKey: AppConstants.Keys.lastBlockDate) as? Date ?? .distantPast
         if !Calendar.current.isDateInToday(lastBlockDate) {
             sharedDefaults?.set(0, forKey: "LastThresholdIndex")
+            sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
         }
 
         let lastIndex  = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
         let blockSize  = AppConstants.currentBlockSize
-        let maxMinutes = (24 * 60) - 1 // 23:59
+        let maxMinutes = AppConstants.maxThresholdMinuteOfDay
 
         // Build the next batch of events continuing from where we left off
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
@@ -67,7 +67,7 @@ class MonitoringManager {
         if useAllActivityFallback {
             print("⚠️ Restart monitoring using all-activity fallback")
         }
-        for i in 1...AppConstants.maxDailyCheckpoints {
+        for i in 1...AppConstants.eventsPerMonitoringBatch {
             let index   = lastIndex + i
             let minutes = index * blockSize
             guard minutes <= maxMinutes else { break }
@@ -118,11 +118,6 @@ class MonitoringManager {
 
         let center = DeviceActivityCenter()
         center.stopMonitoring()
-
-        // Zero BEFORE startMonitoring to avoid a race condition:
-        // if we zeroed AFTER, the extension could wake for a replay, increment the count,
-        // and then this line would overwrite it back to 0 — leaving blocks stuck at 0.
-        sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
 
         // Stamp now so the extension can distinguish iOS replay events (first 15 s after
         // startMonitoring) from genuinely new usage — same logic as in onboarding.

@@ -8,16 +8,16 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     let suiteName = "group.com.otishlau.screenmates"
     private let cloudContainerID = "iCloud.com.otishlau.screenmates"
 
-    // The extension can't import AppConstants, so the main app mirrors this value into
-    // App Group storage. If missing, fall back to deriving from block size.
-    private var maxDailyCheckpoints: Int {
+    // Hard cap of trackable thresholds in a day derived from block size only.
+    // This intentionally ignores app-side event batch size so "events per restart"
+    // cannot accidentally limit total daily counting.
+    private var maxTrackableBlocksPerDay: Int {
         let defaults = UserDefaults(suiteName: suiteName)
-        let mirroredCap = defaults?.integer(forKey: "SharedMaxDailyCheckpoints") ?? 0
-        if mirroredCap > 0 { return mirroredCap }
-
         let bs = defaults?.integer(forKey: "SharedBlockSizeMinutes") ?? 0
         let blockSize = bs > 0 ? bs : 15
-        return (24 * 60) / blockSize
+        let maxThresholdMinuteOfDay = (24 * 60) - 1
+        let dailyCap = (maxThresholdMinuteOfDay + blockSize - 1) / blockSize
+        return max(dailyCap, 1)
     }
 
     // The extension can't import AppConstants from the main app, so the main app mirrors
@@ -92,7 +92,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             currentBlocks += 1
         }
 
-        currentBlocks = min(currentBlocks, maxDailyCheckpoints)
+        currentBlocks = min(currentBlocks, maxTrackableBlocksPerDay)
 
         // 3. Persist
         sharedDefaults.set(currentBlocks, forKey: "DailyBlocksUsed")

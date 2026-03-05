@@ -65,7 +65,6 @@ class CloudKitManager: ObservableObject {
         sharedDefaults?.set(myDisplayName, forKey: AppConstants.Keys.sharedDisplayName)
         sharedDefaults?.set(myGroupID, forKey: AppConstants.Keys.sharedGroupID)
         sharedDefaults?.set(AppConstants.currentBlockSize, forKey: AppConstants.Keys.sharedBlockSizeMinutes)
-        sharedDefaults?.set(AppConstants.maxDailyCheckpoints, forKey: AppConstants.Keys.sharedMaxDailyCheckpoints)
         // Mirror the upload throttle so the extension uses the same test/prod timing as the main app
         sharedDefaults?.set(AppConstants.uploadThrottleSeconds, forKey: AppConstants.Keys.sharedUploadThrottle)
     }

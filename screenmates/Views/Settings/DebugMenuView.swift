@@ -11,6 +11,7 @@ struct DebugMenuView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var isResetting = false
+    @State private var isResettingToBlockZero = false
     @State private var isRestarting = false
     @State private var monitoringActive = false   // whether "dailyTracking" is currently registered
 
@@ -150,10 +151,9 @@ struct DebugMenuView: View {
                         Spacer()
                         if let s = stats {
                             let total = s.apps + s.categories + s.domains
-                            let requiresAppsInTest = AppConstants.isTestMode && s.apps == 0
                             Text("\(s.apps) apps · \(s.categories) cats · \(s.domains) domains")
                                 .font(.caption)
-                                .foregroundColor(total == 0 || requiresAppsInTest ? .red : .secondary)
+                                .foregroundColor(total == 0 ? .red : .secondary)
                         } else {
                             Text("None saved ⚠️")
                                 .foregroundColor(.red)
@@ -163,7 +163,7 @@ struct DebugMenuView: View {
                     HStack {
                         Text("Tracking profile")
                         Spacer()
-                        Text("\(AppConstants.currentBlockSize) min/block · \(AppConstants.maxDailyCheckpoints) events/day")
+                        Text("\(AppConstants.currentBlockSize) min/block · \(AppConstants.eventsPerMonitoringBatch) events/batch · \(AppConstants.maxTrackableBlocksPerDay) max blocks/day")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -275,7 +275,7 @@ struct DebugMenuView: View {
                     }
 
                     // Re-registers monitoring events starting after the last threshold that fired.
-                    // Use this when the daily event limit is exhausted and the extension goes silent.
+                    // Use this when the current event batch is exhausted and the extension goes silent.
                     Button {
                         isRestarting = true
                         DispatchQueue.global().async {
@@ -315,6 +315,31 @@ struct DebugMenuView: View {
                         }
                     }
                     .disabled(isResetting)
+
+                    if AppConstants.isTestMode {
+                        // Test-only hard reset:
+                        // 1) push local/CloudKit count to 0
+                        // 2) re-register monitoring from block_1 for a fresh run.
+                        Button(role: .destructive) {
+                            isResettingToBlockZero = true
+                            cloudManager.resetMyCountToZero {
+                                DispatchQueue.global().async {
+                                    MonitoringManager.shared.restartMonitoring()
+                                    DispatchQueue.main.async {
+                                        isResettingToBlockZero = false
+                                        refreshMonitoringStatus()
+                                    }
+                                }
+                            }
+                        } label: {
+                            if isResettingToBlockZero {
+                                Label("Resetting blocks…", systemImage: "hourglass")
+                            } else {
+                                Label("Reset to Block 0 (Test)", systemImage: "gobackward")
+                            }
+                        }
+                        .disabled(isResettingToBlockZero)
+                    }
                 }
             }
             .navigationTitle("Debug")

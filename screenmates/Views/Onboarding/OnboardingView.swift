@@ -149,11 +149,9 @@ struct OnboardingView: View {
         let blockSize = AppConstants.currentBlockSize
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
 
-        // Keep thresholds within the day (0:00 → 23:59 = 1439 minutes).
-        // Example: 15-min blocks => 96 checkpoints reaches 1440 minutes, so we cap at 1439 for the last event.
-        let maxMinutesInDay = (24 * 60) - 1
-        let maxEventsForBlockSize = (maxMinutesInDay / blockSize) + 1
-        let checkpoints = min(AppConstants.maxDailyCheckpoints, maxEventsForBlockSize)
+        // Keep thresholds within the day and cap this registration to one batch.
+        let maxMinutesInDay = AppConstants.maxThresholdMinuteOfDay
+        let checkpoints = min(AppConstants.eventsPerMonitoringBatch, AppConstants.maxTrackableBlocksPerDay)
 
         let useAllActivityFallback =
             selection.applicationTokens.isEmpty &&
@@ -220,7 +218,7 @@ struct OnboardingView: View {
             print("✅ Monitoring Started with \(events.count) Checkpoints")
 
             // Persist the selection so MonitoringManager can restart monitoring later
-            // (e.g. from the debug menu after exhausting the daily event limit in test mode)
+            // (e.g. from the debug menu after exhausting the current event batch in test mode)
             MonitoringManager.shared.saveSelection(selection)
 
             // Mark setup as done
