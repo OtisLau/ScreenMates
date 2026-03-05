@@ -11,7 +11,6 @@ struct DebugMenuView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var isResetting = false
-    @State private var isResettingToBlockZero = false
     @State private var isRestarting = false
     @State private var monitoringActive = false   // whether "dailyTracking" is currently registered
 
@@ -305,41 +304,32 @@ struct DebugMenuView: View {
                     Button(role: .destructive) {
                         isResetting = true
                         cloudManager.resetMyCountToZero {
-                            isResetting = false
-                        }
-                    } label: {
-                        if isResetting {
-                            Label("Resetting…", systemImage: "hourglass")
-                        } else {
-                            Label("Reset My Count to 0", systemImage: "arrow.counterclockwise")
-                        }
-                    }
-                    .disabled(isResetting)
-
-                    if AppConstants.isTestMode {
-                        // Test-only hard reset:
-                        // 1) push local/CloudKit count to 0
-                        // 2) re-register monitoring from block_1 for a fresh run.
-                        Button(role: .destructive) {
-                            isResettingToBlockZero = true
-                            cloudManager.resetMyCountToZero {
+                            // In test mode, a plain count reset can leave stale high-index
+                            // events registered. Immediately restart so we begin again at block_1.
+                            if AppConstants.isTestMode {
                                 DispatchQueue.global().async {
                                     MonitoringManager.shared.restartMonitoring()
                                     DispatchQueue.main.async {
-                                        isResettingToBlockZero = false
+                                        isResetting = false
                                         refreshMonitoringStatus()
                                     }
                                 }
-                            }
-                        } label: {
-                            if isResettingToBlockZero {
-                                Label("Resetting blocks…", systemImage: "hourglass")
                             } else {
+                                isResetting = false
+                            }
+                    }
+                } label: {
+                        if isResetting {
+                            Label("Resetting…", systemImage: "hourglass")
+                        } else {
+                            if AppConstants.isTestMode {
                                 Label("Reset to Block 0 (Test)", systemImage: "gobackward")
+                            } else {
+                                Label("Reset My Count to 0", systemImage: "arrow.counterclockwise")
                             }
                         }
-                        .disabled(isResettingToBlockZero)
                     }
+                    .disabled(isResetting)
                 }
             }
             .navigationTitle("Debug")
