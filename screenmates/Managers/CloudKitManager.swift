@@ -541,6 +541,7 @@ class CloudKitManager: ObservableObject {
         // is restarted, so this is safe to do without triggering a flood of replays.
         sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
         sharedDefaults?.set(0, forKey: "LastThresholdIndex")
+        sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
         // Remove the upload throttle timestamps so the extension uploads on the very next threshold
         sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")
         sharedDefaults?.removeObject(forKey: "LastExtensionCloudUploadAttempt")

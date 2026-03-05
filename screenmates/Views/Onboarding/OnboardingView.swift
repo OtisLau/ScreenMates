@@ -207,6 +207,7 @@ struct OnboardingView: View {
             let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
             sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
             sharedDefaults?.set(0, forKey: "LastThresholdIndex")
+            sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
             sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")
             sharedDefaults?.removeObject(forKey: "LastExtensionCloudUploadAttempt")
 

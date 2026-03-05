@@ -81,6 +81,9 @@ struct AppConstants {
         // Written by OnboardingView just before startMonitoring() so the extension can
         // distinguish "iOS replay of old events" from "new usage after setup."
         static let monitoringSetupTimestamp = "MonitoringSetupTimestamp"
+
+        // Last threshold index where we already performed automatic batch rollover.
+        static let lastAutoBatchRolloverIndex = "LastAutoBatchRolloverIndex"
     }
 
     static func thresholdEventsPerDay(for blockSize: Int) -> Int {

@@ -52,6 +52,7 @@ class MonitoringManager {
         if !Calendar.current.isDateInToday(lastBlockDate) {
             sharedDefaults?.set(0, forKey: "LastThresholdIndex")
             sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
+            sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
         }
 
         let lastIndex  = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0

@@ -27,6 +27,26 @@ struct ScreenMatesApp: App {
                     if !activities.contains(DeviceActivityName("dailyTracking")) {
                         print("⚠️ Monitoring was dead on foreground — auto-restarting")
                         MonitoringManager.shared.restartMonitoring()
+                        return
+                    }
+
+                    // If the currently registered batch is exhausted (e.g. block 20/40/60
+                    // in 20-event test mode), auto-register the next batch so tracking
+                    // doesn't silently stall.
+                    let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
+                    let lastDate = sharedDefaults?.object(forKey: AppConstants.Keys.lastBlockDate) as? Date ?? .distantPast
+                    guard Calendar.current.isDateInToday(lastDate) else { return }
+
+                    let lastIndex = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
+                    let lastAutoRollover = sharedDefaults?.integer(forKey: AppConstants.Keys.lastAutoBatchRolloverIndex) ?? 0
+                    let exhaustedBatch = lastIndex > 0 &&
+                        lastIndex % AppConstants.eventsPerMonitoringBatch == 0 &&
+                        lastIndex < AppConstants.maxTrackableBlocksPerDay
+
+                    if exhaustedBatch && lastAutoRollover != lastIndex {
+                        print("⚠️ Batch exhausted at block_\(lastIndex) — auto-registering next batch")
+                        sharedDefaults?.set(lastIndex, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
+                        MonitoringManager.shared.restartMonitoring()
                     }
                 }
         }
