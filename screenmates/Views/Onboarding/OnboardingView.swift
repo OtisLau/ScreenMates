@@ -4,7 +4,7 @@ import DeviceActivity
 
 /// Initial onboarding for permissions and app selection
 struct OnboardingView: View {
-    @StateObject var cloudManager = CloudKitManager.shared
+    @ObservedObject var cloudManager = CloudKitManager.shared
 
     @State private var selection = FamilyActivitySelection()
     @State private var isPickerPresented = false
@@ -14,6 +14,19 @@ struct OnboardingView: View {
     @State private var authErrorMessage = ""
     
     let center = AuthorizationCenter.shared
+
+    private var hasAnySelection: Bool {
+        !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty
+    }
+
+    // In 1-minute test mode we require at least one specific app token.
+    // Category-only selections can look configured but often fail to trigger thresholds quickly.
+    private var hasRequiredSelectionForProfile: Bool {
+        if AppConstants.isTestMode {
+            return !selection.applicationTokens.isEmpty
+        }
+        return hasAnySelection
+    }
     
     var body: some View {
         VStack(spacing: 30) {
@@ -64,7 +77,7 @@ struct OnboardingView: View {
                     HStack {
                         Text("2. Select Distracting Apps")
                         Spacer()
-                        if !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty {
+                        if hasAnySelection {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                         }
@@ -76,7 +89,7 @@ struct OnboardingView: View {
                 }
                 
                 // Step 3: Continue button
-                if !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty {
+                if hasAnySelection {
                     Button {
                         startMonitoring()
                     } label: {
@@ -90,7 +103,14 @@ struct OnboardingView: View {
                     .buttonStyle(.borderedProminent)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
-                    .disabled(isStartingMonitoring || !permissionGranted)
+                    .disabled(isStartingMonitoring || !permissionGranted || !hasRequiredSelectionForProfile)
+                }
+
+                if AppConstants.isTestMode && hasAnySelection && selection.applicationTokens.isEmpty {
+                    Text("Test mode tip: pick at least one specific app. Category-only selections can prevent threshold callbacks.")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .multilineTextAlignment(.leading)
                 }
             }
             .padding(.horizontal)
@@ -132,6 +152,13 @@ struct OnboardingView: View {
     }
     
     private func startMonitoring() {
+        if AppConstants.isTestMode && selection.applicationTokens.isEmpty {
+            authErrorMessage = "Select at least one specific app in test mode. Category-only tracking often won't trigger threshold callbacks reliably."
+            showAuthError = true
+            isStartingMonitoring = false
+            return
+        }
+
         isStartingMonitoring = true
         
         let deviceActivityCenter = DeviceActivityCenter()
@@ -154,17 +181,39 @@ struct OnboardingView: View {
         for i in 1...checkpoints {
             let eventName = DeviceActivityEvent.Name("block_\(i)")
             let minutes = min(i * blockSize, maxMinutesInDay)
-            let event = DeviceActivityEvent(
-                applications: selection.applicationTokens,
-                categories: selection.categoryTokens,
-                webDomains: selection.webDomainTokens,
-                threshold: DateComponents(minute: minutes)
-            )
+            let event: DeviceActivityEvent
+            if #available(iOS 17.4, *) {
+                event = DeviceActivityEvent(
+                    applications: selection.applicationTokens,
+                    categories: selection.categoryTokens,
+                    webDomains: selection.webDomainTokens,
+                    threshold: DateComponents(minute: minutes),
+                    includesPastActivity: true
+                )
+            } else {
+                event = DeviceActivityEvent(
+                    applications: selection.applicationTokens,
+                    categories: selection.categoryTokens,
+                    webDomains: selection.webDomainTokens,
+                    threshold: DateComponents(minute: minutes)
+                )
+            }
             events[eventName] = event
         }
         
         do {
             deviceActivityCenter.stopMonitoring()
+
+            // Stamp the current time so the extension can tell the difference between
+            // "iOS replay of old accumulated usage" and "new usage after setup."
+            // Any threshold callback arriving within 15 seconds of this stamp is a replay
+            // and will be skipped — only genuinely new events get counted.
+            let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
+            sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
+            sharedDefaults?.set(0, forKey: "LastThresholdIndex")
+            sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")
+            sharedDefaults?.removeObject(forKey: "LastExtensionCloudUploadAttempt")
+
             try deviceActivityCenter.startMonitoring(
                 DeviceActivityName("dailyTracking"),
                 during: schedule,
@@ -179,6 +228,15 @@ struct OnboardingView: View {
             // Mark setup as done
             cloudManager.isSetupDone = true
             isStartingMonitoring = false
+
+            // iOS replays all already-exceeded thresholds within ~15 seconds of startMonitoring().
+            // Wait 20 seconds for replay to settle, then upload the baseline so group members
+            // see your real current screen time right away — not 0.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+                Task { @MainActor in
+                    await CloudKitManager.shared.refreshGroupNow(reason: "setup-baseline")
+                }
+            }
             
         } catch {
             print("❌ Error starting monitoring: \(error)")

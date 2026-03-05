@@ -12,6 +12,18 @@ class MonitoringManager {
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
     private let selectionKey = "SavedActivitySelection"
 
+    // Returns the app / category / web-domain counts from the last saved selection.
+    // Returns nil if no selection has been saved yet (user has never completed onboarding).
+    var savedSelectionStats: (apps: Int, categories: Int, domains: Int)? {
+        guard let data = defaults.data(forKey: selectionKey),
+              let selection = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data) else {
+            return nil
+        }
+        return (selection.applicationTokens.count,
+                selection.categoryTokens.count,
+                selection.webDomainTokens.count)
+    }
+
     // Encode and persist the FamilyActivitySelection so we can restart monitoring later
     // without going through onboarding again.
     func saveSelection(_ selection: FamilyActivitySelection) {
@@ -34,6 +46,14 @@ class MonitoringManager {
             return
         }
 
+        // If the last block was recorded on a previous day, reset the index so we start
+        // fresh from block_1 — otherwise lastIndex near the daily ceiling would produce
+        // zero events and leave monitoring permanently dead until a manual re-onboard.
+        let lastBlockDate = sharedDefaults?.object(forKey: AppConstants.Keys.lastBlockDate) as? Date ?? .distantPast
+        if !Calendar.current.isDateInToday(lastBlockDate) {
+            sharedDefaults?.set(0, forKey: "LastThresholdIndex")
+        }
+
         let lastIndex  = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
         let blockSize  = AppConstants.currentBlockSize
         let maxMinutes = (24 * 60) - 1 // 23:59
@@ -45,12 +65,24 @@ class MonitoringManager {
             let minutes = index * blockSize
             guard minutes <= maxMinutes else { break }
 
-            events[DeviceActivityEvent.Name("block_\(index)")] = DeviceActivityEvent(
-                applications: selection.applicationTokens,
-                categories:   selection.categoryTokens,
-                webDomains:   selection.webDomainTokens,
-                threshold:    DateComponents(minute: minutes)
-            )
+            let event: DeviceActivityEvent
+            if #available(iOS 17.4, *) {
+                event = DeviceActivityEvent(
+                    applications: selection.applicationTokens,
+                    categories:   selection.categoryTokens,
+                    webDomains:   selection.webDomainTokens,
+                    threshold:    DateComponents(minute: minutes),
+                    includesPastActivity: true
+                )
+            } else {
+                event = DeviceActivityEvent(
+                    applications: selection.applicationTokens,
+                    categories:   selection.categoryTokens,
+                    webDomains:   selection.webDomainTokens,
+                    threshold:    DateComponents(minute: minutes)
+                )
+            }
+            events[DeviceActivityEvent.Name("block_\(index)")] = event
         }
 
         guard !events.isEmpty else {
@@ -67,10 +99,17 @@ class MonitoringManager {
         let center = DeviceActivityCenter()
         center.stopMonitoring()
 
+        // Zero BEFORE startMonitoring to avoid a race condition:
+        // if we zeroed AFTER, the extension could wake for a replay, increment the count,
+        // and then this line would overwrite it back to 0 — leaving blocks stuck at 0.
+        sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
+
+        // Stamp now so the extension can distinguish iOS replay events (first 15 s after
+        // startMonitoring) from genuinely new usage — same logic as in onboarding.
+        sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
+
         do {
             try center.startMonitoring(DeviceActivityName("dailyTracking"), during: schedule, events: events)
-            // Zero the display count so blocks start climbing from 0 in the new batch
-            sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
             print("✅ Monitoring restarted from block_\(lastIndex + 1) with \(events.count) events")
         } catch {
             print("❌ Failed to restart monitoring: \(error)")

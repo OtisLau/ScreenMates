@@ -16,17 +16,17 @@ struct AppConstants {
 
     // MARK: - Block Size
     // One "block" = this many minutes of screen time.
-    // In test mode we use 1 min so you can see the counter move quickly during testing.
+    // In test mode we use 1 min blocks for quick end-to-end verification.
+    // We pair that with a small checkpoint cap (see below) to avoid a huge event map.
     // In production, 15 min per block covers a full 24-hour day within Apple's 96-event limit.
     static let testModeBlockSize   = 1   // minutes
     static let productionBlockSize = 15  // minutes
     static let currentBlockSize    = isTestMode ? testModeBlockSize : productionBlockSize
 
     // In production: 96 events × 15 min = 1440 min = exactly 24 hours.
-    // In test mode: one event per minute so the extension can fire every minute all day.
-    // Note: Apple's limit is undocumented but believed to be around 96–1440 events; runtime
-    // errors from startMonitoring() are caught gracefully in onboarding.
-    static let maxDailyCheckpoints = isTestMode ? (24 * 60) : 96
+    // In test mode we intentionally cap to 20 events for fast feedback.
+    static let testModeMaxDailyCheckpoints = 20
+    static let maxDailyCheckpoints = isTestMode ? testModeMaxDailyCheckpoints : 96
 
     // MARK: - Timing
     // How often the extension is allowed to upload your data to CloudKit after a threshold fires.
@@ -64,5 +64,10 @@ struct AppConstants {
         // Config values mirrored into App Group so the extension and widget can read them
         static let sharedBlockSizeMinutes   = "SharedBlockSizeMinutes"
         static let sharedUploadThrottle     = "SharedUploadThrottleSeconds" // extension reads this
+        static let sharedMaxDailyCheckpoints = "SharedMaxDailyCheckpoints"  // extension reads this
+
+        // Written by OnboardingView just before startMonitoring() so the extension can
+        // distinguish "iOS replay of old events" from "new usage after setup."
+        static let monitoringSetupTimestamp = "MonitoringSetupTimestamp"
     }
 }

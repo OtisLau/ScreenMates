@@ -2,13 +2,23 @@ import DeviceActivity
 import ManagedSettings
 import Foundation
 import CloudKit
-import WidgetKit
 
 class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     let suiteName = "group.com.otishlau.screenmates"
     private let cloudContainerID = "iCloud.com.otishlau.screenmates"
-    private let maxDailyCheckpoints: Int = 96
+
+    // The extension can't import AppConstants, so the main app mirrors this value into
+    // App Group storage. If missing, fall back to deriving from block size.
+    private var maxDailyCheckpoints: Int {
+        let defaults = UserDefaults(suiteName: suiteName)
+        let mirroredCap = defaults?.integer(forKey: "SharedMaxDailyCheckpoints") ?? 0
+        if mirroredCap > 0 { return mirroredCap }
+
+        let bs = defaults?.integer(forKey: "SharedBlockSizeMinutes") ?? 0
+        let blockSize = bs > 0 ? bs : 15
+        return (24 * 60) / blockSize
+    }
 
     // The extension can't import AppConstants from the main app, so the main app mirrors
     // the upload throttle value into App Group storage. We read it here and fall back to
@@ -26,8 +36,15 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             return
         }
 
+        // Early wake marker — written before any guard/return so the debug menu can confirm
+        // the extension process was actually launched by iOS, independent of all downstream logic.
+        sharedDefaults.set(Date(), forKey: "LastExtensionWakeDate")
+        sharedDefaults.set(event.rawValue, forKey: "LastExtensionWakeEvent")
+
         // 1. Check for midnight reset
-        let lastDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? Date()
+        // Use .distantPast as the fallback so a fresh install (nil key) always triggers the
+        // reset on the first callback, properly zeroing both counters before counting begins.
+        let lastDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? .distantPast
         if !Calendar.current.isDateInToday(lastDate) {
             sharedDefaults.set(0, forKey: "DailyBlocksUsed")
             sharedDefaults.set(0, forKey: "LastThresholdIndex")
@@ -41,16 +58,37 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let thresholdIndex = parseThresholdIndex(from: event.rawValue) ?? 0
         let lastIndex = sharedDefaults.integer(forKey: "LastThresholdIndex")
 
+        // When startMonitoring() is called mid-day, iOS immediately fires callbacks for every
+        // threshold already exceeded today. We stamp MonitoringSetupTimestamp just before
+        // startMonitoring() so we can detect this replay window (first 15 seconds).
+        //
+        // During the replay window we use the events to build a baseline that reflects the
+        // user's real accumulated screen time for today (sourced directly from the OS).
+        // DailyBlocksUsed is set to the highest replayed threshold seen so far. The main app
+        // uploads this baseline ~20 seconds after setup once replay has settled.
+        // After the replay window, new events increment on top of that baseline as normal.
+        let setupTime = sharedDefaults.object(forKey: "MonitoringSetupTimestamp") as? Date ?? .distantPast
+        let isSetupReplay = Date().timeIntervalSince(setupTime) < 15
+
         var currentBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
         if thresholdIndex > 0 {
             if thresholdIndex > lastIndex {
-                currentBlocks += 1
+                // Always advance the index so future deduplication works correctly.
                 sharedDefaults.set(thresholdIndex, forKey: "LastThresholdIndex")
+                if isSetupReplay {
+                    // Replay event — use it to raise the baseline but don't increment.
+                    // max() ensures the highest replayed threshold wins even with race conditions.
+                    let baseline = max(currentBlocks, thresholdIndex)
+                    sharedDefaults.set(baseline, forKey: "DailyBlocksUsed")
+                    return
+                }
+                currentBlocks += 1
             } else {
                 // Duplicate / out-of-order callback — ignore
                 return
             }
         } else {
+            if isSetupReplay { return }
             currentBlocks += 1
         }
 
@@ -65,11 +103,62 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
         print("🧱 Threshold hit. Daily total: \(currentBlocks) blocks")
 
-        // 4. Tell the widget to reload so it shows fresh data immediately
-        WidgetCenter.shared.reloadAllTimelines()
+        // 4. Update the current user's entry in the widget cache so the widget shows
+        //    fresh data for the local user without waiting for a CloudKit round-trip.
+        //    Then tell the widget to reload — but throttle to max once per 30 seconds
+        //    so rapid replay events don't hammer the widget process into an OOM kill.
+        updateWidgetCache(sharedDefaults: sharedDefaults, currentBlocks: currentBlocks)
 
         // 5. Upload to CloudKit so friends see your updated count
         attemptCloudUpload(sharedDefaults: sharedDefaults, currentBlocks: currentBlocks)
+    }
+
+    // Minimal struct that matches the JSON schema of MemberData / CachedMember so the
+    // extension can update the leaderboard cache without importing the main app target.
+    private struct CachedMember: Codable {
+        let id: String
+        let userID: String
+        let displayName: String
+        var blocks: Int
+        var lastUpdate: Date
+    }
+
+    // Updates the current user's row in the leaderboard cache.
+    // The extension only writes to the cache — it does NOT call reloadAllTimelines().
+    // Calling reloadAllTimelines() from the extension can race with the main app's own
+    // reloadTimelines() calls (triggered by the 30s dashboard timer and CloudKit pushes),
+    // spawning two concurrent widget processes that together exceed the widget memory limit.
+    //
+    // The widget picks up the updated cache via:
+    //   1. The main app's reloadTimelines(ofKind:) on every 30s refresh / CloudKit push
+    //   2. The widget's own 15-minute self-refresh policy
+    private func updateWidgetCache(sharedDefaults: UserDefaults, currentBlocks: Int) {
+        guard
+            let userID      = sharedDefaults.string(forKey: "SharedMyUserID"),   !userID.isEmpty,
+            let displayName = sharedDefaults.string(forKey: "SharedMyDisplayName"), !displayName.isEmpty
+        else { return }
+
+        let cacheKey = "CachedLeaderboardData"
+        var members: [CachedMember] = []
+        if let data = sharedDefaults.data(forKey: cacheKey),
+           let decoded = try? JSONDecoder().decode([CachedMember].self, from: data) {
+            members = decoded
+        }
+
+        // Find the current user's row and update it; add a new row if not present yet.
+        if let idx = members.firstIndex(where: { $0.userID == userID }) {
+            members[idx] = CachedMember(id: userID, userID: userID,
+                                        displayName: displayName,
+                                        blocks: currentBlocks, lastUpdate: Date())
+        } else {
+            members.append(CachedMember(id: userID, userID: userID,
+                                        displayName: displayName,
+                                        blocks: currentBlocks, lastUpdate: Date()))
+        }
+
+        if let encoded = try? JSONEncoder().encode(members) {
+            sharedDefaults.set(encoded, forKey: cacheKey)
+        }
     }
 
     private func attemptCloudUpload(sharedDefaults: UserDefaults?, currentBlocks: Int) {
