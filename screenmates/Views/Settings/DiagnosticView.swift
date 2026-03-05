@@ -3,7 +3,7 @@ import CloudKit
 
 /// Quick diagnostic view to see what's wrong
 struct DiagnosticView: View {
-    @StateObject var cloudManager = CloudKitManager.shared
+    @ObservedObject var cloudManager = CloudKitManager.shared
     @State private var diagnosticResult = "Running diagnostics..."
     @State private var isPingingCloudKit = false
     

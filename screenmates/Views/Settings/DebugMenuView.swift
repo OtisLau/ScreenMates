@@ -1,16 +1,25 @@
 import SwiftUI
+import DeviceActivity
+import FamilyControls
+import Combine
 
 // Simple debug screen for testing — just shows the two things you care about:
 //  1. Is everyone connected to the same group?
 //  2. Is CloudKit actually receiving updates?
 struct DebugMenuView: View {
-    @StateObject var cloudManager = CloudKitManager.shared
+    @ObservedObject var cloudManager = CloudKitManager.shared
     @Environment(\.dismiss) var dismiss
 
     @State private var isResetting = false
     @State private var isRestarting = false
+    @State private var monitoringActive = false   // whether "dailyTracking" is currently registered
 
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
+
+    private func refreshMonitoringStatus() {
+        let activities = DeviceActivityCenter().activities
+        monitoringActive = activities.contains(DeviceActivityName("dailyTracking"))
+    }
 
     // Last time the extension successfully uploaded to CloudKit
     private var lastUploadDate: Date? {
@@ -30,6 +39,22 @@ struct DebugMenuView: View {
     }
     private var lastThresholdEvent: String? {
         sharedDefaults?.string(forKey: "LastExtensionThresholdEvent")
+    }
+
+    // Earliest possible confirmation the extension process launched — written before any guard/return.
+    // If this is nil after using a tracked app, the extension is NOT being woken by iOS at all.
+    // If this is set but "Extension fired" is still "Not yet", the extension is launching but
+    // failing somewhere in the threshold-processing logic (see console logs).
+    private var lastExtensionWakeDate: Date? {
+        sharedDefaults?.object(forKey: "LastExtensionWakeDate") as? Date
+    }
+    private var lastExtensionWakeEvent: String? {
+        sharedDefaults?.string(forKey: "LastExtensionWakeEvent")
+    }
+
+    // When was monitoring last configured (onboarding "Save & Continue" or "Restart Monitoring")?
+    private var monitoringSetupDate: Date? {
+        sharedDefaults?.object(forKey: AppConstants.Keys.monitoringSetupTimestamp) as? Date
     }
 
     var body: some View {
@@ -75,11 +100,103 @@ struct DebugMenuView: View {
                 // Shows whether the extension is firing and whether uploads are succeeding
                 Section("CloudKit Sync Status") {
 
+                    // Family Controls authorization status — if this isn't "Approved",
+                    // startMonitoring() may silently register but never deliver callbacks.
+                    HStack {
+                        Text("FC auth status")
+                        Spacer()
+                        let status = AuthorizationCenter.shared.authorizationStatus
+                        switch status {
+                        case .approved:
+                            Text("Approved ✅").foregroundColor(.green)
+                        case .denied:
+                            Text("DENIED ❌").foregroundColor(.red)
+                        case .notDetermined:
+                            Text("Not determined ⚠️").foregroundColor(.orange)
+                        @unknown default:
+                            Text("Unknown (\(String(describing: status)))").foregroundColor(.orange)
+                        }
+                    }
+
+                    // Is DeviceActivity monitoring currently active?
+                    // If this says NO, the OS killed the session — tap Restart Monitoring.
+                    HStack {
+                        Text("Monitoring active")
+                        Spacer()
+                        if monitoringActive {
+                            Text("Yes ✅")
+                                .foregroundColor(.green)
+                        } else {
+                            Text("No ⚠️ — tap Restart Monitoring")
+                                .foregroundColor(.orange)
+                        }
+                    }
+
+                    // When was monitoring last set up?
+                    if let d = monitoringSetupDate {
+                        HStack {
+                            Text("Last setup")
+                            Spacer()
+                            Text(DateHelpers.relativeTime(from: d))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    // What is tracked? Shows how many apps/categories/domains are in the saved selection.
+                    // If ALL are 0, monitoring is active but watching nothing — go through onboarding again.
+                    let stats = MonitoringManager.shared.savedSelectionStats
+                    HStack {
+                        Text("Apps selected")
+                        Spacer()
+                        if let s = stats {
+                            let total = s.apps + s.categories + s.domains
+                            let requiresAppsInTest = AppConstants.isTestMode && s.apps == 0
+                            Text("\(s.apps) apps · \(s.categories) cats · \(s.domains) domains")
+                                .font(.caption)
+                                .foregroundColor(total == 0 || requiresAppsInTest ? .red : .secondary)
+                        } else {
+                            Text("None saved ⚠️")
+                                .foregroundColor(.red)
+                        }
+                    }
+
+                    HStack {
+                        Text("Tracking profile")
+                        Spacer()
+                        Text("\(AppConstants.currentBlockSize) min/block · \(AppConstants.maxDailyCheckpoints) events/day")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    // Did the extension process launch at all?
+                    // Written BEFORE any guard/return in eventDidReachThreshold.
+                    // If this is "Never" after using a tracked app, iOS is not waking the extension.
+                    if let d = lastExtensionWakeDate {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Extension woke")
+                                Spacer()
+                                Text(DateHelpers.relativeTime(from: d))
+                                    .foregroundColor(.green)
+                            }
+                            if let e = lastExtensionWakeEvent {
+                                Text(e).font(.caption2).foregroundColor(.secondary)
+                            }
+                        }
+                    } else {
+                        HStack {
+                            Text("Extension woke")
+                            Spacer()
+                            Text("Never — use a tracked app")
+                                .foregroundColor(.orange)
+                        }
+                    }
+
                     // Did the extension detect screen time?
                     if let d = lastThresholdDate {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text("Extension last fired")
+                                Text("Extension threshold")
                                 Spacer()
                                 Text(DateHelpers.relativeTime(from: d))
                                     .foregroundColor(.green)
@@ -90,7 +207,7 @@ struct DebugMenuView: View {
                         }
                     } else {
                         HStack {
-                            Text("Extension fired")
+                            Text("Extension threshold")
                             Spacer()
                             Text("Not yet — use a tracked app")
                                 .foregroundColor(.orange)
@@ -133,6 +250,20 @@ struct DebugMenuView: View {
                         Spacer()
                         Text("\(cloudManager.currentBlocksUsed) blocks (\(cloudManager.currentBlocksUsed * AppConstants.currentBlockSize) min)")
                             .foregroundColor(.secondary)
+                    }
+
+                    // Last threshold index the extension processed.
+                    // HIGH + 0 blocks = duplicate-blocking (tap Reset My Count to 0).
+                    // 0 after a reset = correct/expected.
+                    HStack {
+                        Text("Last threshold index")
+                        Spacer()
+                        let idx = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
+                        let blocks = cloudManager.currentBlocksUsed
+                        let isStuck = idx > 50 && blocks == 0  // high index, 0 blocks = bad state
+                        Text("\(idx)")
+                            .monospacedDigit()
+                            .foregroundColor(isStuck ? .orange : .secondary)
                     }
                 }
 
@@ -192,6 +323,15 @@ struct DebugMenuView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .onAppear {
+                refreshMonitoringStatus()
+            }
+            // Refresh monitoring status every 5 seconds while the debug menu is open
+            .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+                refreshMonitoringStatus()
+                // Also force a UI refresh so "Your local blocks" stays live
+                cloudManager.objectWillChange.send()
             }
         }
     }

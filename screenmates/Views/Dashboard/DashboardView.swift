@@ -4,7 +4,9 @@ import Combine
 // The main screen — shows your screen time and your group's screen time side by side.
 // Refreshes automatically every 60 seconds and whenever a silent push comes in.
 struct DashboardView: View {
-    @StateObject var cloudManager = CloudKitManager.shared
+    // @ObservedObject (not @StateObject) because DashboardView doesn't own the singleton —
+    // it just observes it. Using @StateObject here would give SwiftUI wrong ownership semantics.
+    @ObservedObject var cloudManager = CloudKitManager.shared
 
     @State private var showingSettings = false
 
