@@ -1,11 +1,13 @@
 import SwiftUI
 import BackgroundTasks
+import DeviceActivity
 
 @main
 struct ScreenMatesApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject var cloudManager = CloudKitManager.shared
-    
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -15,6 +17,17 @@ struct ScreenMatesApp: App {
 
                     // Ensure CloudKit subscription so other devices get silent updates.
                     cloudManager.ensureGroupSubscription()
+                }
+                .onChange(of: scenePhase) { phase in
+                    guard phase == .active, cloudManager.isSetupDone else { return }
+                    // Every time the app comes to the foreground, check whether the OS
+                    // killed the DeviceActivity monitoring session while we were away.
+                    // If it did, silently restart it so tracking resumes immediately.
+                    let activities = DeviceActivityCenter().activities
+                    if !activities.contains(DeviceActivityName("dailyTracking")) {
+                        print("⚠️ Monitoring was dead on foreground — auto-restarting")
+                        MonitoringManager.shared.restartMonitoring()
+                    }
                 }
         }
         .backgroundTask(.appRefresh(AppConstants.backgroundTaskIdentifier)) {

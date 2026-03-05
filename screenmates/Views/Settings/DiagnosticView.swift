@@ -3,7 +3,7 @@ import CloudKit
 
 /// Quick diagnostic view to see what's wrong
 struct DiagnosticView: View {
-    @StateObject var cloudManager = CloudKitManager.shared
+    @ObservedObject var cloudManager = CloudKitManager.shared
     @State private var diagnosticResult = "Running diagnostics..."
     @State private var isPingingCloudKit = false
     
@@ -190,7 +190,6 @@ struct DiagnosticView: View {
                 // Now try to fetch
                 if !self.cloudManager.myGroupID.isEmpty {
                     self.diagnosticResult += "\nFetching group data...\n"
-                    self.cloudManager.fetchGroupDetails()
                     self.cloudManager.fetchGroupData(useCache: false)
                     
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {

@@ -17,10 +17,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) {
         // CloudKit sends silent pushes for subscriptions. Treat any received push as a signal
         // to refresh leaderboard cache (best-effort).
-        DispatchQueue.main.async {
-            Task { @MainActor in
-                await CloudKitManager.shared.refreshGroupNow(reason: "silent-push")
-            }
+        // Task @MainActor already guarantees main thread — no need for DispatchQueue.main wrapper.
+        Task { @MainActor in
+            await CloudKitManager.shared.refreshGroupNow(reason: "silent-push")
         }
         completionHandler(.newData)
     }

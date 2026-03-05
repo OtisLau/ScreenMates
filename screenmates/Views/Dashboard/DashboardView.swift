@@ -1,105 +1,85 @@
 import SwiftUI
 import Combine
 
-/// Main dashboard showing user stats and leaderboard
+// The main screen — shows your screen time and your group's screen time side by side.
+// Refreshes automatically every 60 seconds and whenever a silent push comes in.
 struct DashboardView: View {
-    @StateObject var cloudManager = CloudKitManager.shared
-    @StateObject var streakManager = StreakManager.shared
-    
+    // @ObservedObject (not @StateObject) because DashboardView doesn't own the singleton —
+    // it just observes it. Using @StateObject here would give SwiftUI wrong ownership semantics.
+    @ObservedObject var cloudManager = CloudKitManager.shared
+
     @State private var showingSettings = false
-    
-    let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
-    
-    private var currentBlocks: Int {
-        cloudManager.currentBlocksUsed
+
+    // Refresh the group data on a timer while the app is open.
+    // Interval is controlled by AppConstants — shorter in test mode, longer in production.
+    let timer = Timer.publish(every: AppConstants.dashboardRefreshInterval, on: .main, in: .common).autoconnect()
+
+    // How many minutes the current user has used their phone today
+    private var myMinutesUsed: Int {
+        cloudManager.currentBlocksUsed * AppConstants.currentBlockSize
     }
-    
-    private var dailyGoal: Int {
-        cloudManager.currentGroup?.dailyGoalBlocks ?? AppConstants.defaultDailyGoalBlocks
-    }
-    
+
     var body: some View {
         NavigationView {
-            ZStack {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Group ID display
-                        VStack(spacing: 4) {
-                            Text("GROUP ID")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(cloudManager.myGroupID)
-                                .font(.title)
-                                .bold()
-                                .kerning(2)
-                        }
-                        .padding()
-                        .background(Color.purple.opacity(0.1))
-                        .cornerRadius(12)
-                        
-                        // User stats card
-                        UserStatsCard(
-                            blocksUsed: currentBlocks,
-                            dailyGoal: dailyGoal,
-                            streak: streakManager.currentStreak
-                        )
-                        .padding(.horizontal)
-                        
-                        // Leaderboard section
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("LEADERBOARD")
-                                .font(.caption)
-                                .bold()
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal)
-                            
-                            if cloudManager.isLoading && cloudManager.groupMembers.isEmpty {
-                                ProgressView()
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                            } else if cloudManager.groupMembers.isEmpty {
-                                emptyState
-                            } else {
-                                leaderboardList
-                            }
-                        }
-                        
-                        // Last sync info
-                        if let lastSync = cloudManager.lastSyncTime {
-                            Text("Last updated: \(DateHelpers.relativeTime(from: lastSync))")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.top, 8)
-                        }
-                        
-                        // Test mode indicator
-                        if AppConstants.isTestMode {
-                            Text("TEST MODE: 1 min = 1 block (max \(AppConstants.maxDailyCheckpoints) blocks/day)")
-                                .font(.caption2)
-                                .foregroundColor(.orange)
-                                .padding(.top, 4)
+            ScrollView {
+                VStack(spacing: 20) {
 
-                            if currentBlocks >= AppConstants.maxDailyCheckpoints {
-                                Text("Reached test-mode tracking cap (\(AppConstants.maxDailyCheckpoints)). This happens because we only register \(AppConstants.maxDailyCheckpoints) daily checkpoints with Screen Time.")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
-                            }
+                    // Your own stats at the top
+                    UserStatsCard(
+                        minutesUsed: myMinutesUsed,
+                        displayName: cloudManager.myDisplayName
+                    )
+                    .padding(.horizontal)
+
+                    // Group code so people can share it easily
+                    VStack(spacing: 4) {
+                        Text("group code")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(cloudManager.myGroupID)
+                            .font(.title2)
+                            .bold()
+                            .kerning(2)
+                    }
+                    .padding()
+                    .background(Color.purple.opacity(0.08))
+                    .cornerRadius(12)
+
+                    // Everyone in the group
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("GROUP")
+                            .font(.caption)
+                            .bold()
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal)
+
+                        if cloudManager.isLoading && cloudManager.groupMembers.isEmpty {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                        } else if cloudManager.groupMembers.isEmpty {
+                            emptyState
+                        } else {
+                            memberList
                         }
                     }
-                    .padding(.vertical)
+
+                    // Show when we last got fresh data
+                    if let lastSync = cloudManager.lastSyncTime {
+                        Text("last updated \(DateHelpers.relativeTime(from: lastSync))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
-                .refreshable {
-                    await refreshData()
-                }
+                .padding(.vertical)
+            }
+            .refreshable {
+                await cloudManager.refreshGroupNow(reason: "pull-to-refresh")
             }
             .navigationTitle("ScreenMates")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingSettings = true
-                    } label: {
+                    Button { showingSettings = true } label: {
                         Image(systemName: "gearshape.fill")
                     }
                 }
@@ -108,7 +88,6 @@ struct DashboardView: View {
                 SettingsView()
             }
             .onAppear {
-                print("📱 Dashboard appeared")
                 Task { @MainActor in
                     await cloudManager.refreshGroupNow(reason: "appear")
                 }
@@ -120,64 +99,46 @@ struct DashboardView: View {
             }
         }
     }
-    
-    private var leaderboardList: some View {
+
+    // List of all group members sorted by most screen time
+    private var memberList: some View {
         ForEach(cloudManager.groupMembers) { member in
-            LeaderboardRow(
+            GroupMemberRow(
                 member: member,
-                isCurrentUser: member.userID == cloudManager.myID,
-                dailyGoal: dailyGoal
+                isCurrentUser: member.userID == cloudManager.myID
             )
             .padding(.horizontal)
         }
     }
-    
+
+    // Shown when no group data has loaded yet
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "person.2.slash")
                 .font(.system(size: 50))
                 .foregroundColor(.secondary)
-            
-            Text("No Members Yet")
+
+            Text("No one here yet")
                 .font(.headline)
-            
-            Text("Share your group code with friends to get started!")
+
+            Text("Share your group code with friends to get started.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-            
-            // Troubleshooting hint
-            VStack(spacing: 8) {
-                Text("Not seeing yourself?")
-                    .font(.caption2)
-                    .foregroundColor(.orange)
-                
-                Button {
-                    // Force refresh
-                    cloudManager.updateMyProfile {
-                        cloudManager.fetchGroupData(useCache: false)
-                    }
-                } label: {
-                    Label("Refresh Now", systemImage: "arrow.clockwise")
-                        .font(.caption)
+
+            Button {
+                cloudManager.updateMyProfile {
+                    cloudManager.fetchGroupData(useCache: false)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+                    .font(.caption)
             }
-            .padding(.top, 8)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
-    }
-    
-    private func loadData() {
-        cloudManager.fetchGroupData()
-        cloudManager.fetchGroupDetails()
-        cloudManager.updateMyProfile()
-    }
-    
-    private func refreshData() async {
-        await cloudManager.refreshGroupNow(reason: "pull-to-refresh")
     }
 }

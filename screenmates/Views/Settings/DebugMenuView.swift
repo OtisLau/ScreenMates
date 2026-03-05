@@ -1,403 +1,338 @@
 import SwiftUI
-import UIKit
-import BackgroundTasks
+import DeviceActivity
+import FamilyControls
+import Combine
 
-/// Debug menu for testing and troubleshooting
+// Simple debug screen for testing — just shows the two things you care about:
+//  1. Is everyone connected to the same group?
+//  2. Is CloudKit actually receiving updates?
 struct DebugMenuView: View {
-    @StateObject var cloudManager = CloudKitManager.shared
-    @StateObject var streakManager = StreakManager.shared
-    @StateObject var notificationManager = NotificationManager.shared
-    
+    @ObservedObject var cloudManager = CloudKitManager.shared
     @Environment(\.dismiss) var dismiss
-    
-    @State private var showingSyncSuccess = false
-    @State private var showingResetSuccess = false
-    
+
+    @State private var isResetting = false
+    @State private var isRestarting = false
+    @State private var monitoringActive = false   // whether "dailyTracking" is currently registered
+
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
 
-    private var appGroupContainerStatus: String {
-        let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupSuite)
-        return url == nil ? "Unavailable" : "OK"
+    private func refreshMonitoringStatus() {
+        let activities = DeviceActivityCenter().activities
+        monitoringActive = activities.contains(DeviceActivityName("dailyTracking"))
     }
 
-    private var appGroupContainerStatusColor: Color {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConstants.appGroupSuite) == nil ? .red : .green
-    }
-    
-    private var currentBlocks: Int {
-        sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
-    }
-    
-    private var lastBlockDate: Date? {
-        sharedDefaults?.object(forKey: AppConstants.Keys.lastBlockDate) as? Date
-    }
-
-    private var lastExtensionUploadAttempt: Date? {
+    // Last time the extension successfully uploaded to CloudKit
+    private var lastUploadDate: Date? {
         sharedDefaults?.object(forKey: "LastExtensionCloudUploadAttempt") as? Date
     }
-
-    private var lastExtensionUploadSuccess: Bool? {
-        guard let sharedDefaults else { return nil }
-        if sharedDefaults.object(forKey: "LastExtensionCloudUploadSuccess") == nil { return nil }
-        return sharedDefaults.bool(forKey: "LastExtensionCloudUploadSuccess")
+    private var lastUploadSucceeded: Bool? {
+        guard sharedDefaults?.object(forKey: "LastExtensionCloudUploadSuccess") != nil else { return nil }
+        return sharedDefaults?.bool(forKey: "LastExtensionCloudUploadSuccess")
     }
-
-    private var lastExtensionUploadError: String? {
+    private var lastUploadError: String? {
         sharedDefaults?.string(forKey: "LastExtensionCloudUploadError")
     }
 
-    private var lastExtensionThresholdDate: Date? {
+    // Last time the extension detected a screen time threshold
+    private var lastThresholdDate: Date? {
         sharedDefaults?.object(forKey: "LastExtensionThresholdDate") as? Date
     }
-
-    private var lastExtensionThresholdEvent: String? {
+    private var lastThresholdEvent: String? {
         sharedDefaults?.string(forKey: "LastExtensionThresholdEvent")
     }
 
-    private var lastExtensionThresholdActivity: String? {
-        sharedDefaults?.string(forKey: "LastExtensionThresholdActivity")
+    // Earliest possible confirmation the extension process launched — written before any guard/return.
+    // If this is nil after using a tracked app, the extension is NOT being woken by iOS at all.
+    // If this is set but "Extension fired" is still "Not yet", the extension is launching but
+    // failing somewhere in the threshold-processing logic (see console logs).
+    private var lastExtensionWakeDate: Date? {
+        sharedDefaults?.object(forKey: "LastExtensionWakeDate") as? Date
+    }
+    private var lastExtensionWakeEvent: String? {
+        sharedDefaults?.string(forKey: "LastExtensionWakeEvent")
     }
 
-    private var lastExtensionBlocksAtThreshold: Int? {
-        guard let sharedDefaults else { return nil }
-        if sharedDefaults.object(forKey: "LastExtensionBlocksAtThreshold") == nil { return nil }
-        return sharedDefaults.integer(forKey: "LastExtensionBlocksAtThreshold")
+    // When was monitoring last configured (onboarding "Save & Continue" or "Restart Monitoring")?
+    private var monitoringSetupDate: Date? {
+        sharedDefaults?.object(forKey: AppConstants.Keys.monitoringSetupTimestamp) as? Date
     }
 
-    private var mirroredGoal: Int? {
-        guard let sharedDefaults else { return nil }
-        if sharedDefaults.object(forKey: AppConstants.Keys.sharedDailyGoalBlocks) == nil { return nil }
-        return sharedDefaults.integer(forKey: AppConstants.Keys.sharedDailyGoalBlocks)
-    }
-    
     var body: some View {
         NavigationView {
             List {
-                // Mode info
-                Section("Mode") {
-                    HStack {
-                        Text("Test Mode")
-                        Spacer()
-                        Text(AppConstants.isTestMode ? "Enabled" : "Disabled")
-                            .foregroundColor(AppConstants.isTestMode ? .orange : .green)
-                    }
-                    
-                    HStack {
-                        Text("Block Size")
-                        Spacer()
-                        Text("\(AppConstants.currentBlockSize) minutes")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // UserDefaults data
-                Section("Local Data (UserDefaults)") {
-                    HStack {
-                        Text("Daily Blocks Used")
-                        Spacer()
-                        Text("\(currentBlocks)")
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    HStack {
-                        Text("Current Streak")
-                        Spacer()
-                        Text("\(streakManager.currentStreak)")
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    if let lastDate = lastBlockDate {
-                        HStack {
-                            Text("Last Block Date")
-                            Spacer()
-                            Text(lastDate.formatted(date: .abbreviated, time: .shortened))
-                                .foregroundColor(.secondary)
-                                .font(.caption)
-                        }
-                    }
-                }
 
-                Section("App Group") {
-                    HStack {
-                        Text("Container")
-                        Spacer()
-                        Text(appGroupContainerStatus)
-                            .foregroundColor(appGroupContainerStatusColor)
-                    }
-
-                    if let mirroredGoal {
-                        HStack {
-                            Text("Mirrored Goal")
-                            Spacer()
-                            Text("\(mirroredGoal) blocks")
-                                .foregroundColor(.secondary)
-                        }
+                // WHO'S IN THE GROUP
+                // Shows everyone connected so you can confirm all test devices joined correctly
+                Section("Group Members (\(cloudManager.groupMembers.count))") {
+                    if cloudManager.myGroupID.isEmpty {
+                        Text("Not in a group yet")
+                            .foregroundColor(.red)
                     } else {
-                        Text("Mirrored Goal: not set yet (open dashboard once or change goal)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // CloudKit data
-                Section("CloudKit Data") {
-                    HStack {
-                        Text("User ID")
-                        Spacer()
-                        Text(cloudManager.myID)
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                    }
-                    
-                    HStack {
-                        Text("Display Name")
-                        Spacer()
-                        Text(cloudManager.myDisplayName.isEmpty ? "NOT SET" : cloudManager.myDisplayName)
-                            .foregroundColor(cloudManager.myDisplayName.isEmpty ? .red : .secondary)
-                            .font(.caption)
-                    }
-                    
-                    HStack {
-                        Text("Group ID")
-                        Spacer()
-                        Text(cloudManager.myGroupID)
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                    }
-                    
-                    HStack {
-                        Text("Group Members")
-                        Spacer()
-                        Text("\(cloudManager.groupMembers.count)")
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    if let lastSync = cloudManager.lastSyncTime {
-                        HStack {
-                            Text("Last Sync")
-                            Spacer()
-                            Text(DateHelpers.relativeTime(from: lastSync))
-                                .foregroundColor(.secondary)
+                        LabeledContent("Group ID", value: cloudManager.myGroupID)
+
+                        if cloudManager.groupMembers.isEmpty {
+                            Text("No members found in CloudKit — tap Force Refresh")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        } else {
+                            // Show each person with their current block count so you can
+                            // verify the right data is coming through
+                            ForEach(cloudManager.groupMembers) { member in
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(member.userID == cloudManager.myID ? "\(member.displayName) (you)" : member.displayName)
+                                            .font(.body)
+                                        Text("updated \(DateHelpers.relativeTime(from: member.lastUpdate))")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Text("\(member.minutesUsed) min")
+                                        .bold()
+                                        .monospacedDigit()
+                                }
+                            }
                         }
                     }
                 }
-                
-                // Actions
-                Section("Actions") {
-                    NavigationLink {
-                        DiagnosticView()
-                    } label: {
-                        Label("Run Diagnostics", systemImage: "stethoscope")
-                            .foregroundColor(.purple)
-                    }
-                    
-                    Button {
-                        manualSync()
-                    } label: {
-                        Label("Force Sync Now", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    
-                    Button {
-                        simulateMidnightReset()
-                    } label: {
-                        Label("Simulate Midnight Reset", systemImage: "moon.stars")
-                    }
-                    
-                    Button {
-                        sendTestNotification()
-                    } label: {
-                        Label("Send Test Notification", systemImage: "bell")
-                    }
-                    
-                    Button(role: .destructive) {
-                        clearLocalData()
-                    } label: {
-                        Label("Clear Local Data", systemImage: "trash")
-                    }
-                }
-                
-                // Notification info
-                Section("Notifications") {
+
+                // IS DATA REACHING CLOUDKIT
+                // Shows whether the extension is firing and whether uploads are succeeding
+                Section("CloudKit Sync Status") {
+
+                    // Family Controls authorization status — if this isn't "Approved",
+                    // startMonitoring() may silently register but never deliver callbacks.
                     HStack {
-                        Text("Authorized")
+                        Text("FC auth status")
                         Spacer()
-                        Text(notificationManager.isAuthorized ? "Yes" : "No")
-                            .foregroundColor(notificationManager.isAuthorized ? .green : .red)
-                    }
-                    
-                    HStack {
-                        Text("Enabled in App")
-                        Spacer()
-                        Text(notificationManager.notificationsEnabled ? "Yes" : "No")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // Background sync info
-                Section("Background Sync") {
-                    // System-level background refresh availability (if this is Off, BGTasks will never run)
-                    HStack {
-                        Text("Background Refresh")
-                        Spacer()
-                        Text(backgroundRefreshStatusText)
-                            .foregroundColor(backgroundRefreshStatusColor)
-                            .font(.caption)
+                        let status = AuthorizationCenter.shared.authorizationStatus
+                        switch status {
+                        case .approved:
+                            Text("Approved ✅").foregroundColor(.green)
+                        case .denied:
+                            Text("DENIED ❌").foregroundColor(.red)
+                        case .notDetermined:
+                            Text("Not determined ⚠️").foregroundColor(.orange)
+                        @unknown default:
+                            Text("Unknown (\(String(describing: status)))").foregroundColor(.orange)
+                        }
                     }
 
-                    if let lastBgSync = sharedDefaults?.object(forKey: AppConstants.Keys.lastBackgroundSync) as? Date {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Last Background Sync")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(lastBgSync.formatted(date: .abbreviated, time: .shortened))
-                                .font(.body)
-                            Text(DateHelpers.relativeTime(from: lastBgSync))
-                                .font(.caption2)
+                    // Is DeviceActivity monitoring currently active?
+                    // If this says NO, the OS killed the session — tap Restart Monitoring.
+                    HStack {
+                        Text("Monitoring active")
+                        Spacer()
+                        if monitoringActive {
+                            Text("Yes ✅")
                                 .foregroundColor(.green)
+                        } else {
+                            Text("No ⚠️ — tap Restart Monitoring")
+                                .foregroundColor(.orange)
                         }
-                    } else {
-                        Text("No background syncs yet")
+                    }
+
+                    // When was monitoring last set up?
+                    if let d = monitoringSetupDate {
+                        HStack {
+                            Text("Last setup")
+                            Spacer()
+                            Text(DateHelpers.relativeTime(from: d))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    // What is tracked? Shows how many apps/categories/domains are in the saved selection.
+                    // If ALL are 0, monitoring is active but watching nothing — go through onboarding again.
+                    let stats = MonitoringManager.shared.savedSelectionStats
+                    HStack {
+                        Text("Apps selected")
+                        Spacer()
+                        if let s = stats {
+                            let total = s.apps + s.categories + s.domains
+                            let requiresAppsInTest = AppConstants.isTestMode && s.apps == 0
+                            Text("\(s.apps) apps · \(s.categories) cats · \(s.domains) domains")
+                                .font(.caption)
+                                .foregroundColor(total == 0 || requiresAppsInTest ? .red : .secondary)
+                        } else {
+                            Text("None saved ⚠️")
+                                .foregroundColor(.red)
+                        }
+                    }
+
+                    HStack {
+                        Text("Tracking profile")
+                        Spacer()
+                        Text("\(AppConstants.currentBlockSize) min/block · \(AppConstants.maxDailyCheckpoints) events/day")
+                            .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    
-                    if let history = sharedDefaults?.array(forKey: AppConstants.Keys.backgroundSyncHistory) as? [[String: Any]] {
-                        NavigationLink {
-                            BackgroundSyncHistoryView(history: history)
-                        } label: {
+
+                    // Did the extension process launch at all?
+                    // Written BEFORE any guard/return in eventDidReachThreshold.
+                    // If this is "Never" after using a tracked app, iOS is not waking the extension.
+                    if let d = lastExtensionWakeDate {
+                        VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text("Sync History")
+                                Text("Extension woke")
                                 Spacer()
-                                Text("\(history.count) events")
-                                    .foregroundColor(.secondary)
+                                Text(DateHelpers.relativeTime(from: d))
+                                    .foregroundColor(.green)
+                            }
+                            if let e = lastExtensionWakeEvent {
+                                Text(e).font(.caption2).foregroundColor(.secondary)
                             }
                         }
+                    } else {
+                        HStack {
+                            Text("Extension woke")
+                            Spacer()
+                            Text("Never — use a tracked app")
+                                .foregroundColor(.orange)
+                        }
+                    }
+
+                    // Did the extension detect screen time?
+                    if let d = lastThresholdDate {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Extension threshold")
+                                Spacer()
+                                Text(DateHelpers.relativeTime(from: d))
+                                    .foregroundColor(.green)
+                            }
+                            if let e = lastThresholdEvent {
+                                Text(e).font(.caption2).foregroundColor(.secondary)
+                            }
+                        }
+                    } else {
+                        HStack {
+                            Text("Extension threshold")
+                            Spacer()
+                            Text("Not yet — use a tracked app")
+                                .foregroundColor(.orange)
+                        }
+                    }
+
+                    // Did the upload reach CloudKit?
+                    if let d = lastUploadDate {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Last upload")
+                                Spacer()
+                                Text(DateHelpers.relativeTime(from: d))
+                                    .foregroundColor(.secondary)
+                            }
+                            if let success = lastUploadSucceeded {
+                                Text(success ? "✅ Reached CloudKit" : "❌ Failed")
+                                    .font(.caption)
+                                    .foregroundColor(success ? .green : .red)
+                            }
+                            if let err = lastUploadError, !err.isEmpty {
+                                Text(err)
+                                    .font(.caption2)
+                                    .foregroundColor(.red)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    } else {
+                        HStack {
+                            Text("Upload status")
+                            Spacer()
+                            Text("No uploads yet")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    // Your current local block count (what the extension has tracked)
+                    HStack {
+                        Text("Your local blocks")
+                        Spacer()
+                        Text("\(cloudManager.currentBlocksUsed) blocks (\(cloudManager.currentBlocksUsed * AppConstants.currentBlockSize) min)")
+                            .foregroundColor(.secondary)
+                    }
+
+                    // Last threshold index the extension processed.
+                    // HIGH + 0 blocks = duplicate-blocking (tap Reset My Count to 0).
+                    // 0 after a reset = correct/expected.
+                    HStack {
+                        Text("Last threshold index")
+                        Spacer()
+                        let idx = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
+                        let blocks = cloudManager.currentBlocksUsed
+                        let isStuck = idx > 50 && blocks == 0  // high index, 0 blocks = bad state
+                        Text("\(idx)")
+                            .monospacedDigit()
+                            .foregroundColor(isStuck ? .orange : .secondary)
                     }
                 }
 
-                // Extension sync info (this is what increments blocks)
-                Section("Extension Cloud Upload") {
-                    if let d = lastExtensionThresholdDate {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Last Threshold Event")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(d.formatted(date: .abbreviated, time: .shortened))
-                                .font(.body)
-                            Text(DateHelpers.relativeTime(from: d))
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                            if let e = lastExtensionThresholdEvent {
-                                Text("Event: \(e)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            if let a = lastExtensionThresholdActivity {
-                                Text("Activity: \(a)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            if let b = lastExtensionBlocksAtThreshold {
-                                Text("Blocks at event: \(b)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    } else {
-                        Text("No threshold events yet (extension may not be firing)")
-                            .foregroundColor(.secondary)
+                Section("Actions") {
+                    Button {
+                        cloudManager.forceSyncNow()
+                    } label: {
+                        Label("Force Refresh Now", systemImage: "arrow.triangle.2.circlepath")
                     }
 
-                    if let attempt = lastExtensionUploadAttempt {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Last Upload Attempt")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(attempt.formatted(date: .abbreviated, time: .shortened))
-                                .font(.body)
-                            Text(DateHelpers.relativeTime(from: attempt))
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+                    // Re-registers monitoring events starting after the last threshold that fired.
+                    // Use this when the daily event limit is exhausted and the extension goes silent.
+                    Button {
+                        isRestarting = true
+                        DispatchQueue.global().async {
+                            MonitoringManager.shared.restartMonitoring()
+                            DispatchQueue.main.async { isRestarting = false }
                         }
-                    } else {
-                        Text("No upload attempts yet")
-                            .foregroundColor(.secondary)
-                    }
-
-                    if let success = lastExtensionUploadSuccess {
-                        HStack {
-                            Text("Last Result")
-                            Spacer()
-                            Text(success ? "✅ Success" : "❌ Failed")
-                                .foregroundColor(success ? .green : .red)
+                    } label: {
+                        if isRestarting {
+                            Label("Restarting…", systemImage: "hourglass")
+                        } else {
+                            Label("Restart Monitoring", systemImage: "play.circle")
                         }
                     }
+                    .disabled(isRestarting)
 
-                    if let err = lastExtensionUploadError, !err.isEmpty {
-                        Text(err)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    // Sends the app back to onboarding so you can re-select apps and re-register
+                    // DeviceActivity monitoring. Use this after a fresh build wipes the registration.
+                    // Your username and group ID are preserved — just pick apps and tap Save & Continue.
+                    Button(role: .destructive) {
+                        cloudManager.isSetupDone = false
+                    } label: {
+                        Label("Re-run App Setup", systemImage: "arrow.uturn.backward")
                     }
+
+                    // Zeros your local block count and immediately uploads 0 to CloudKit.
+                    // Use this before a test run to clear yesterday's leftover data.
+                    Button(role: .destructive) {
+                        isResetting = true
+                        cloudManager.resetMyCountToZero {
+                            isResetting = false
+                        }
+                    } label: {
+                        if isResetting {
+                            Label("Resetting…", systemImage: "hourglass")
+                        } else {
+                            Label("Reset My Count to 0", systemImage: "arrow.counterclockwise")
+                        }
+                    }
+                    .disabled(isResetting)
                 }
             }
-            .navigationTitle("Debug Menu")
+            .navigationTitle("Debug")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
+                    Button("Done") { dismiss() }
                 }
             }
-            .alert("Success", isPresented: $showingSyncSuccess) {
-                Button("OK") { }
-            } message: {
-                Text("Manual sync completed!")
+            .onAppear {
+                refreshMonitoringStatus()
             }
-            .alert("Reset Complete", isPresented: $showingResetSuccess) {
-                Button("OK") { }
-            } message: {
-                Text("Daily blocks reset to 0")
+            // Refresh monitoring status every 5 seconds while the debug menu is open
+            .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+                refreshMonitoringStatus()
+                // Also force a UI refresh so "Your local blocks" stays live
+                cloudManager.objectWillChange.send()
             }
-        }
-    }
-    
-    private func manualSync() {
-        cloudManager.forceSyncNow()
-        showingSyncSuccess = true
-    }
-    
-    private func simulateMidnightReset() {
-        sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
-        sharedDefaults?.set(Date(), forKey: AppConstants.Keys.lastBlockDate)
-        showingResetSuccess = true
-    }
-    
-    private func sendTestNotification() {
-        notificationManager.sendTestNotification()
-    }
-    
-    private func clearLocalData() {
-        sharedDefaults?.removeObject(forKey: AppConstants.Keys.dailyBlocksUsed)
-        sharedDefaults?.removeObject(forKey: AppConstants.Keys.lastBlockDate)
-        sharedDefaults?.removeObject(forKey: AppConstants.Keys.currentStreak)
-        sharedDefaults?.removeObject(forKey: AppConstants.Keys.lastCheckDate)
-    }
-
-    private var backgroundRefreshStatusText: String {
-        switch UIApplication.shared.backgroundRefreshStatus {
-        case .available: return "Available"
-        case .denied: return "Denied"
-        case .restricted: return "Restricted"
-        @unknown default: return "Unknown"
-        }
-    }
-
-    private var backgroundRefreshStatusColor: Color {
-        switch UIApplication.shared.backgroundRefreshStatus {
-        case .available: return .green
-        case .denied, .restricted: return .red
-        @unknown default: return .secondary
         }
     }
 }

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Username setup screen after onboarding
 struct UsernameSetupView: View {
-    @StateObject var cloudManager = CloudKitManager.shared
+    @ObservedObject var cloudManager = CloudKitManager.shared
     
     @State private var username = ""
     @State private var isLoading = false
