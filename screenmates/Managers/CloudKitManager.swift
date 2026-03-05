@@ -34,6 +34,12 @@ class CloudKitManager: ObservableObject {
     // Shared storage accessible by the ScreenTimeMonitor extension and widget
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
 
+    // Throttle widget timeline reloads to avoid OOM-killing the widget process
+    // (the widget self-refreshes every 15 min on its own; we only need to nudge it
+    //  when there's genuinely new data, and at most once every 2 minutes).
+    private var lastWidgetReload: Date = .distantPast
+    private let widgetReloadThrottle: TimeInterval = 2 * 60 // 2 minutes
+
     // The CloudKit record ID for this user — always the same so we never create duplicates
     private var myUserProfileRecordID: CKRecord.ID {
         CKRecord.ID(recordName: myID)
@@ -59,6 +65,7 @@ class CloudKitManager: ObservableObject {
         sharedDefaults?.set(myDisplayName, forKey: AppConstants.Keys.sharedDisplayName)
         sharedDefaults?.set(myGroupID, forKey: AppConstants.Keys.sharedGroupID)
         sharedDefaults?.set(AppConstants.currentBlockSize, forKey: AppConstants.Keys.sharedBlockSizeMinutes)
+        sharedDefaults?.set(AppConstants.maxDailyCheckpoints, forKey: AppConstants.Keys.sharedMaxDailyCheckpoints)
         // Mirror the upload throttle so the extension uses the same test/prod timing as the main app
         sharedDefaults?.set(AppConstants.uploadThrottleSeconds, forKey: AppConstants.Keys.sharedUploadThrottle)
     }
@@ -189,12 +196,13 @@ class CloudKitManager: ObservableObject {
         let currentBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
         print("📤 Uploading profile: \(myDisplayName), \(currentBlocks) blocks")
 
-        database.fetch(withRecordID: myUserProfileRecordID) { record, error in
+        database.fetch(withRecordID: myUserProfileRecordID) { [weak self] record, error in
+            guard let self else { completion?(); return }
             let profileRecord: CKRecord
+            
             if let record {
                 profileRecord = record
             } else if let ckError = error as? CKError, ckError.code == .unknownItem {
-                // First time — create a new record
                 profileRecord = CKRecord(recordType: "UserProfile", recordID: self.myUserProfileRecordID)
             } else if let error {
                 print("❌ Profile fetch failed: \(error.localizedDescription)")
@@ -218,15 +226,18 @@ class CloudKitManager: ObservableObject {
     // Try to save a profile record, retrying once if there's a write conflict.
     // Conflicts happen when the app and extension both try to save at the same time.
     private func saveProfileWithRetry(_ record: CKRecord, attemptsRemaining: Int, completion: (() -> Void)?) {
-        database.save(record) { _, error in
+        database.save(record) { [weak self] _, error in
+            guard let self else { completion?(); return }
             if let error = error as? CKError {
                 let isRetryable = [.serverRecordChanged, .zoneBusy, .serviceUnavailable, .requestRateLimited].contains(error.code)
                 if isRetryable && attemptsRemaining > 0 {
                     let retryAfter = (error.userInfo[CKErrorRetryAfterKey] as? Double) ?? 0.5
                     print("⚠️ Save conflict — retrying in \(retryAfter)s")
-                    DispatchQueue.global().asyncAfter(deadline: .now() + retryAfter) {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + retryAfter) { [weak self] in
+                        guard let self else { completion?(); return }
                         // Re-fetch the latest version from the server then re-apply our fields
-                        self.database.fetch(withRecordID: self.myUserProfileRecordID) { fetched, _ in
+                        self.database.fetch(withRecordID: self.myUserProfileRecordID) { [weak self] fetched, _ in
+                            guard let self else { completion?(); return }
                             let toSave = fetched ?? record
                             toSave["user_id"] = self.myID
                             toSave["display_name"] = self.myDisplayName
@@ -244,7 +255,7 @@ class CloudKitManager: ObservableObject {
                 print("❌ Profile save failed: \(error.localizedDescription)")
             } else {
                 print("✅ Profile saved")
-                DispatchQueue.main.async { self.lastSyncTime = Date() }
+                DispatchQueue.main.async { [weak self] in self?.lastSyncTime = Date() }
             }
             completion?()
         }
@@ -295,6 +306,11 @@ class CloudKitManager: ObservableObject {
 
     // Full refresh: update your own profile then fetch everyone else's.
     // Called by pull-to-refresh, the 60-second timer, and incoming silent pushes.
+    //
+    // Silent pushes mean "a group member's record changed — go fetch."
+    // We must NOT upload our own profile in response: doing so triggers another push,
+    // which triggers another upload, creating an infinite feedback loop that hammers
+    // CloudKit until it activates error-rate mitigation.
     @MainActor
     func refreshGroupNow(reason: String? = nil) async {
         guard !myGroupID.isEmpty else { return }
@@ -303,11 +319,14 @@ class CloudKitManager: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        await withCheckedContinuation { cont in
-            updateMyProfile { cont.resume() }
-        }
+        let isSilentPush = reason == "silent-push"
 
-        try? await cleanupMyDuplicateProfiles()
+        if !isSilentPush {
+            await withCheckedContinuation { cont in
+                updateMyProfile { cont.resume() }
+            }
+            try? await cleanupMyDuplicateProfiles()
+        }
 
         do {
             let members = try await fetchGroupMembersAsync()
@@ -463,9 +482,15 @@ class CloudKitManager: ObservableObject {
         if let encoded = try? JSONEncoder().encode(groupMembers) {
             sharedDefaults?.set(encoded, forKey: AppConstants.Keys.cachedLeaderboardData)
         }
-        // Tell the widget to reload now that we have fresh data
+        // Throttle widget reloads to at most once every 2 minutes.
+        // The widget self-refreshes every 15 min anyway, and the 30-second dashboard
+        // timer was triggering constant widget process spawns → OOM kills on iOS 26.
         #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadTimelines(ofKind: "ScreenMatesGroupWidget")
+        let now = Date()
+        if now.timeIntervalSince(lastWidgetReload) >= widgetReloadThrottle {
+            lastWidgetReload = now
+            WidgetCenter.shared.reloadTimelines(ofKind: "ScreenMatesGroupWidget")
+        }
         #endif
     }
 
@@ -524,12 +549,12 @@ class CloudKitManager: ObservableObject {
         print("🔄 Reset local block count to 0 — uploading to CloudKit...")
 
         // Push 0 blocks to CloudKit right now so friends see the reset instantly
-        database.fetch(withRecordID: myUserProfileRecordID) { record, error in
+        database.fetch(withRecordID: myUserProfileRecordID) { [weak self] record, error in
+            guard let self else { completion?(); return }
             let profileRecord: CKRecord
             if let record {
                 profileRecord = record
             } else {
-                // No existing record — create a fresh one
                 profileRecord = CKRecord(recordType: "UserProfile", recordID: self.myUserProfileRecordID)
             }
 
@@ -540,18 +565,16 @@ class CloudKitManager: ObservableObject {
             profileRecord["last_updated"]     = Date()
             profileRecord["last_active_date"] = Date()
 
-            self.database.save(profileRecord) { _, saveError in
-                DispatchQueue.main.async {
-                    if let saveError {
-                        print("❌ Reset upload failed: \(saveError.localizedDescription)")
-                    } else {
-                        print("✅ Reset uploaded to CloudKit")
-                    }
-                    // Refresh the group so the UI reflects the new 0 immediately
-                    Task { @MainActor in
-                        await self.refreshGroupNow(reason: "reset")
-                        completion?()
-                    }
+            self.database.save(profileRecord) { [weak self] _, saveError in
+                guard let self else { completion?(); return }
+                if let saveError {
+                    print("❌ Reset upload failed: \(saveError.localizedDescription)")
+                } else {
+                    print("✅ Reset uploaded to CloudKit")
+                }
+                Task { @MainActor [weak self] in
+                    await self?.refreshGroupNow(reason: "reset")
+                    completion?()
                 }
             }
         }
