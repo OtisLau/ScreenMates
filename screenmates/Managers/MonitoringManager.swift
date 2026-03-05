@@ -60,6 +60,13 @@ class MonitoringManager {
 
         // Build the next batch of events continuing from where we left off
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
+        let useAllActivityFallback =
+            selection.applicationTokens.isEmpty &&
+            selection.webDomainTokens.isEmpty &&
+            selection.categoryTokens.count >= AppConstants.allCategoryTokenCountForAllActivityFallback
+        if useAllActivityFallback {
+            print("⚠️ Restart monitoring using all-activity fallback")
+        }
         for i in 1...AppConstants.maxDailyCheckpoints {
             let index   = lastIndex + i
             let minutes = index * blockSize
@@ -67,20 +74,33 @@ class MonitoringManager {
 
             let event: DeviceActivityEvent
             if #available(iOS 17.4, *) {
-                event = DeviceActivityEvent(
-                    applications: selection.applicationTokens,
-                    categories:   selection.categoryTokens,
-                    webDomains:   selection.webDomainTokens,
-                    threshold:    DateComponents(minute: minutes),
-                    includesPastActivity: true
-                )
+                if useAllActivityFallback {
+                    event = DeviceActivityEvent(
+                        threshold: DateComponents(minute: minutes),
+                        includesPastActivity: true
+                    )
+                } else {
+                    event = DeviceActivityEvent(
+                        applications: selection.applicationTokens,
+                        categories:   selection.categoryTokens,
+                        webDomains:   selection.webDomainTokens,
+                        threshold:    DateComponents(minute: minutes),
+                        includesPastActivity: true
+                    )
+                }
             } else {
-                event = DeviceActivityEvent(
-                    applications: selection.applicationTokens,
-                    categories:   selection.categoryTokens,
-                    webDomains:   selection.webDomainTokens,
-                    threshold:    DateComponents(minute: minutes)
-                )
+                if useAllActivityFallback {
+                    event = DeviceActivityEvent(
+                        threshold: DateComponents(minute: minutes)
+                    )
+                } else {
+                    event = DeviceActivityEvent(
+                        applications: selection.applicationTokens,
+                        categories:   selection.categoryTokens,
+                        webDomains:   selection.webDomainTokens,
+                        threshold:    DateComponents(minute: minutes)
+                    )
+                }
             }
             events[DeviceActivityEvent.Name("block_\(index)")] = event
         }

@@ -154,26 +154,47 @@ struct OnboardingView: View {
         let maxMinutesInDay = (24 * 60) - 1
         let maxEventsForBlockSize = (maxMinutesInDay / blockSize) + 1
         let checkpoints = min(AppConstants.maxDailyCheckpoints, maxEventsForBlockSize)
+
+        let useAllActivityFallback =
+            selection.applicationTokens.isEmpty &&
+            selection.webDomainTokens.isEmpty &&
+            selection.categoryTokens.count >= AppConstants.allCategoryTokenCountForAllActivityFallback
+        if useAllActivityFallback {
+            print("⚠️ Using all-activity fallback because all categories appear selected")
+        }
         
         for i in 1...checkpoints {
             let eventName = DeviceActivityEvent.Name("block_\(i)")
             let minutes = min(i * blockSize, maxMinutesInDay)
             let event: DeviceActivityEvent
             if #available(iOS 17.4, *) {
-                event = DeviceActivityEvent(
-                    applications: selection.applicationTokens,
-                    categories: selection.categoryTokens,
-                    webDomains: selection.webDomainTokens,
-                    threshold: DateComponents(minute: minutes),
-                    includesPastActivity: true
-                )
+                if useAllActivityFallback {
+                    event = DeviceActivityEvent(
+                        threshold: DateComponents(minute: minutes),
+                        includesPastActivity: true
+                    )
+                } else {
+                    event = DeviceActivityEvent(
+                        applications: selection.applicationTokens,
+                        categories: selection.categoryTokens,
+                        webDomains: selection.webDomainTokens,
+                        threshold: DateComponents(minute: minutes),
+                        includesPastActivity: true
+                    )
+                }
             } else {
-                event = DeviceActivityEvent(
-                    applications: selection.applicationTokens,
-                    categories: selection.categoryTokens,
-                    webDomains: selection.webDomainTokens,
-                    threshold: DateComponents(minute: minutes)
-                )
+                if useAllActivityFallback {
+                    event = DeviceActivityEvent(
+                        threshold: DateComponents(minute: minutes)
+                    )
+                } else {
+                    event = DeviceActivityEvent(
+                        applications: selection.applicationTokens,
+                        categories: selection.categoryTokens,
+                        webDomains: selection.webDomainTokens,
+                        threshold: DateComponents(minute: minutes)
+                    )
+                }
             }
             events[eventName] = event
         }

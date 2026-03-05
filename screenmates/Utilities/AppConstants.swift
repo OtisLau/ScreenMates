@@ -28,6 +28,11 @@ struct AppConstants {
     static let testModeMaxDailyCheckpoints = 20
     static let maxDailyCheckpoints = isTestMode ? testModeMaxDailyCheckpoints : 96
 
+    // Heuristic for "all categories selected" in FamilyActivityPicker.
+    // If apps/domains are empty and category token count reaches this value,
+    // we treat monitoring as all-activity to avoid category-only gaps on some devices.
+    static let allCategoryTokenCountForAllActivityFallback = 13
+
     // MARK: - Timing
     // How often the extension is allowed to upload your data to CloudKit after a threshold fires.
     // This needs to be LESS than the block size (15 min) so every threshold results in an upload.
