@@ -19,15 +19,6 @@ struct OnboardingView: View {
         !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty
     }
 
-    // In 1-minute test mode we require at least one specific app token.
-    // Category-only selections can look configured but often fail to trigger thresholds quickly.
-    private var hasRequiredSelectionForProfile: Bool {
-        if AppConstants.isTestMode {
-            return !selection.applicationTokens.isEmpty
-        }
-        return hasAnySelection
-    }
-    
     var body: some View {
         VStack(spacing: 30) {
             Spacer()
@@ -103,14 +94,7 @@ struct OnboardingView: View {
                     .buttonStyle(.borderedProminent)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
-                    .disabled(isStartingMonitoring || !permissionGranted || !hasRequiredSelectionForProfile)
-                }
-
-                if AppConstants.isTestMode && hasAnySelection && selection.applicationTokens.isEmpty {
-                    Text("Test mode tip: pick at least one specific app. Category-only selections can prevent threshold callbacks.")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                        .multilineTextAlignment(.leading)
+                    .disabled(isStartingMonitoring || !permissionGranted)
                 }
             }
             .padding(.horizontal)
@@ -152,13 +136,6 @@ struct OnboardingView: View {
     }
     
     private func startMonitoring() {
-        if AppConstants.isTestMode && selection.applicationTokens.isEmpty {
-            authErrorMessage = "Select at least one specific app in test mode. Category-only tracking often won't trigger threshold callbacks reliably."
-            showAuthError = true
-            isStartingMonitoring = false
-            return
-        }
-
         isStartingMonitoring = true
         
         let deviceActivityCenter = DeviceActivityCenter()
