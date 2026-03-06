@@ -67,6 +67,7 @@ class CloudKitManager: ObservableObject {
         sharedDefaults?.set(AppConstants.currentBlockSize, forKey: AppConstants.Keys.sharedBlockSizeMinutes)
         // Mirror the upload throttle so the extension uses the same test/prod timing as the main app
         sharedDefaults?.set(AppConstants.uploadThrottleSeconds, forKey: AppConstants.Keys.sharedUploadThrottle)
+        sharedDefaults?.set(AppConstants.includesPastActivity, forKey: AppConstants.Keys.sharedIncludesPastActivity)
     }
 
     // MARK: - CloudKit Subscriptions

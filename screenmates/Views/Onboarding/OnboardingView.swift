@@ -169,7 +169,7 @@ struct OnboardingView: View {
                 if useAllActivityFallback {
                     event = DeviceActivityEvent(
                         threshold: DateComponents(minute: minutes),
-                        includesPastActivity: true
+                        includesPastActivity: AppConstants.includesPastActivity
                     )
                 } else {
                     event = DeviceActivityEvent(
@@ -177,7 +177,7 @@ struct OnboardingView: View {
                         categories: selection.categoryTokens,
                         webDomains: selection.webDomainTokens,
                         threshold: DateComponents(minute: minutes),
-                        includesPastActivity: true
+                        includesPastActivity: AppConstants.includesPastActivity
                     )
                 }
             } else {

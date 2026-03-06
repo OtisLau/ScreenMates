@@ -58,9 +58,10 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let thresholdIndex = parseThresholdIndex(from: event.rawValue) ?? 0
         let lastIndex = sharedDefaults.integer(forKey: "LastThresholdIndex")
 
-        // When startMonitoring() is called mid-day, iOS immediately fires callbacks for every
-        // threshold already exceeded today. We stamp MonitoringSetupTimestamp just before
-        // startMonitoring() so we can detect this replay window (first 15 seconds).
+        // When includesPastActivity is enabled and startMonitoring() is called mid-day,
+        // iOS immediately fires callbacks for every threshold already exceeded today.
+        // We stamp MonitoringSetupTimestamp just before startMonitoring() so we can
+        // detect this replay window (first 15 seconds).
         //
         // During the replay window we use the events to build a baseline that reflects the
         // user's real accumulated screen time for today (sourced directly from the OS).
@@ -68,7 +69,8 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         // uploads this baseline ~20 seconds after setup once replay has settled.
         // After the replay window, new events increment on top of that baseline as normal.
         let setupTime = sharedDefaults.object(forKey: "MonitoringSetupTimestamp") as? Date ?? .distantPast
-        let isSetupReplay = Date().timeIntervalSince(setupTime) < 15
+        let includesPastActivity = sharedDefaults.object(forKey: "SharedIncludesPastActivity") as? Bool ?? true
+        let isSetupReplay = includesPastActivity && Date().timeIntervalSince(setupTime) < 15
 
         var currentBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
         if thresholdIndex > 0 {
