@@ -64,11 +64,11 @@ extension MyAppWidgetAttributes {
 
 extension MyAppWidgetAttributes.ContentState {
     fileprivate static var smiley: MyAppWidgetAttributes.ContentState {
-        MyAppWidgetAttributes.ContentState(emoji: "😀")
+        MyAppWidgetAttributes.ContentState(emoji: "")
      }
      
      fileprivate static var starEyes: MyAppWidgetAttributes.ContentState {
-         MyAppWidgetAttributes.ContentState(emoji: "🤩")
+         MyAppWidgetAttributes.ContentState(emoji: "")
      }
 }
 

@@ -67,7 +67,6 @@ class CloudKitManager: ObservableObject {
         sharedDefaults?.set(AppConstants.currentBlockSize, forKey: AppConstants.Keys.sharedBlockSizeMinutes)
         // Mirror the upload throttle so the extension uses the same test/prod timing as the main app
         sharedDefaults?.set(AppConstants.uploadThrottleSeconds, forKey: AppConstants.Keys.sharedUploadThrottle)
-        sharedDefaults?.set(AppConstants.includesPastActivity, forKey: AppConstants.Keys.sharedIncludesPastActivity)
     }
 
     // MARK: - CloudKit Subscriptions
@@ -95,10 +94,10 @@ class CloudKitManager: ObservableObject {
 
         database.save(subscription) { _, error in
             if let error {
-                print("❌ CloudKit subscription failed: \(error.localizedDescription)")
+                print(" CloudKit subscription failed: \(error.localizedDescription)")
                 return
             }
-            print("✅ Subscribed to group \(self.myGroupID)")
+            print(" Subscribed to group \(self.myGroupID)")
             DispatchQueue.main.async {
                 self.lastSubscriptionGroupID = self.myGroupID
             }
@@ -188,13 +187,13 @@ class CloudKitManager: ObservableObject {
         mirrorIdentityToAppGroup()
 
         guard !myDisplayName.isEmpty else {
-            print("⚠️ Skipping profile update — display name not set yet")
+            print(" Skipping profile update — display name not set yet")
             completion?()
             return
         }
 
         let currentBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
-        print("📤 Uploading profile: \(myDisplayName), \(currentBlocks) blocks")
+        print(" Uploading profile: \(myDisplayName), \(currentBlocks) blocks")
 
         database.fetch(withRecordID: myUserProfileRecordID) { [weak self] record, error in
             guard let self else { completion?(); return }
@@ -205,7 +204,7 @@ class CloudKitManager: ObservableObject {
             } else if let ckError = error as? CKError, ckError.code == .unknownItem {
                 profileRecord = CKRecord(recordType: "UserProfile", recordID: self.myUserProfileRecordID)
             } else if let error {
-                print("❌ Profile fetch failed: \(error.localizedDescription)")
+                print(" Profile fetch failed: \(error.localizedDescription)")
                 completion?()
                 return
             } else {
@@ -232,7 +231,7 @@ class CloudKitManager: ObservableObject {
                 let isRetryable = [.serverRecordChanged, .zoneBusy, .serviceUnavailable, .requestRateLimited].contains(error.code)
                 if isRetryable && attemptsRemaining > 0 {
                     let retryAfter = (error.userInfo[CKErrorRetryAfterKey] as? Double) ?? 0.5
-                    print("⚠️ Save conflict — retrying in \(retryAfter)s")
+                    print(" Save conflict — retrying in \(retryAfter)s")
                     DispatchQueue.global().asyncAfter(deadline: .now() + retryAfter) { [weak self] in
                         guard let self else { completion?(); return }
                         // Re-fetch the latest version from the server then re-apply our fields
@@ -250,11 +249,11 @@ class CloudKitManager: ObservableObject {
                     }
                     return
                 }
-                print("❌ Profile save failed: \(error.localizedDescription)")
+                print(" Profile save failed: \(error.localizedDescription)")
             } else if let error {
-                print("❌ Profile save failed: \(error.localizedDescription)")
+                print(" Profile save failed: \(error.localizedDescription)")
             } else {
-                print("✅ Profile saved")
+                print(" Profile saved")
                 DispatchQueue.main.async { [weak self] in self?.lastSyncTime = Date() }
             }
             completion?()
@@ -282,7 +281,7 @@ class CloudKitManager: ObservableObject {
                     var members: [MemberData] = []
                     for match in matchResults {
                         if case .success(let record) = match.1 {
-                            let userID = record["user_id"] as? String ?? "Unknown"
+                            let userID = record["user_id"] as? String ?? record.recordID.recordName
                             members.append(MemberData(
                                 userID: userID,
                                 displayName: record["display_name"] as? String ?? userID,
@@ -294,10 +293,10 @@ class CloudKitManager: ObservableObject {
                     self.groupMembers = self.dedupeMembers(members)
                     self.lastSyncTime = Date()
                     self.cacheLeaderboardData()
-                    print("✅ Fetched \(self.groupMembers.count) group members")
+                    print(" Fetched \(self.groupMembers.count) group members")
 
                 case .failure(let error):
-                    print("❌ Fetch failed: \(error.localizedDescription)")
+                    print(" Fetch failed: \(error.localizedDescription)")
                     self.lastError = self.handleCloudKitError(error)
                 }
             }
@@ -314,7 +313,7 @@ class CloudKitManager: ObservableObject {
     @MainActor
     func refreshGroupNow(reason: String? = nil) async {
         guard !myGroupID.isEmpty else { return }
-        print("🔄 Refreshing group (\(reason ?? ""))")
+        print(" Refreshing group (\(reason ?? ""))")
 
         isLoading = true
         defer { isLoading = false }
@@ -348,7 +347,7 @@ class CloudKitManager: ObservableObject {
 
         for (_, result) in matchResults {
             if case .success(let record) = result {
-                let userID = record["user_id"] as? String ?? "Unknown"
+                let userID = record["user_id"] as? String ?? record.recordID.recordName
                 members.append(MemberData(
                     userID: userID,
                     displayName: record["display_name"] as? String ?? userID,
@@ -363,20 +362,9 @@ class CloudKitManager: ObservableObject {
 
     // Remove old duplicate CloudKit records created by earlier builds or reinstalls
     private func cleanupMyDuplicateProfiles() async throws {
-        let predicate: NSPredicate
-        if !myGroupID.isEmpty, !myDisplayName.isEmpty {
-            predicate = NSCompoundPredicate(orPredicateWithSubpredicates: [
-                NSPredicate(format: "user_id == %@", myID),
-                NSCompoundPredicate(andPredicateWithSubpredicates: [
-                    NSPredicate(format: "group_id == %@", myGroupID),
-                    NSPredicate(format: "display_name == %@", myDisplayName)
-                ])
-            ])
-        } else {
-            predicate = NSPredicate(format: "user_id == %@", myID)
-        }
-
-        let query = CKQuery(recordType: "UserProfile", predicate: predicate)
+        // Only operate on records that explicitly belong to this user ID.
+        // Never match by display name; multiple users can legitimately share a name.
+        let query = CKQuery(recordType: "UserProfile", predicate: NSPredicate(format: "user_id == %@", myID))
         let (matchResults, _) = try await database.records(matching: query)
         let records: [CKRecord] = matchResults.compactMap {
             if case .success(let r) = $0.1 { return r }
@@ -387,7 +375,7 @@ class CloudKitManager: ObservableObject {
         let toDelete = records.map(\.recordID).filter { $0 != myUserProfileRecordID }
         guard !toDelete.isEmpty else { return }
 
-        print("🧹 Deleting \(toDelete.count) duplicate profile(s)")
+        print(" Deleting \(toDelete.count) duplicate profile(s)")
         for recordID in toDelete {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 database.delete(withRecordID: recordID) { _, error in
@@ -397,8 +385,7 @@ class CloudKitManager: ObservableObject {
         }
     }
 
-    // If multiple CloudKit records exist for the same person (from reinstalls or old bugs),
-    // keep only the most recently updated one.
+    // If multiple CloudKit records exist for the same user ID, keep only the most recent one.
     private func dedupeMembers(_ members: [MemberData]) -> [MemberData] {
         var byUserID: [String: MemberData] = [:]
         for member in members {
@@ -408,20 +395,7 @@ class CloudKitManager: ObservableObject {
                 byUserID[member.userID] = member
             }
         }
-
-        // Secondary dedupe by display name to catch reinstall duplicates
-        var byName: [String: MemberData] = [:]
-        for member in byUserID.values {
-            let key = member.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard !key.isEmpty else { continue }
-            if let existing = byName[key] {
-                if member.lastUpdate > existing.lastUpdate { byName[key] = member }
-            } else {
-                byName[key] = member
-            }
-        }
-
-        return Array(byName.values).sorted { $0.blocks > $1.blocks }
+        return Array(byUserID.values).sorted { $0.blocks > $1.blocks }
     }
 
     // MARK: - Background Sync
@@ -464,12 +438,12 @@ class CloudKitManager: ObservableObject {
             record["last_active_date"] = Date()
 
             try await database.save(record)
-            print("✅ Background sync: \(currentBlocks) blocks uploaded")
+            print(" Background sync: \(currentBlocks) blocks uploaded")
             return (true, nil, nil, nil)
         } catch {
             let retryAfter = (error as? CKError)?.userInfo[CKErrorRetryAfterKey] as? Double
             let code = (error as? CKError)?.code.rawValue
-            print("❌ Background sync failed: \(error.localizedDescription)")
+            print(" Background sync failed: \(error.localizedDescription)")
             return (false, error.localizedDescription, code, retryAfter)
         }
     }
@@ -499,7 +473,7 @@ class CloudKitManager: ObservableObject {
         if let data = sharedDefaults?.data(forKey: AppConstants.Keys.cachedLeaderboardData),
            let cached = try? JSONDecoder().decode([MemberData].self, from: data) {
             self.groupMembers = cached
-            print("📦 Loaded \(cached.count) cached members from disk")
+            print(" Loaded \(cached.count) cached members from disk")
         }
     }
 
@@ -537,9 +511,8 @@ class CloudKitManager: ObservableObject {
     // Useful in debug mode to wipe stale data before a fresh test run.
     func resetMyCountToZero(completion: (() -> Void)? = nil) {
         // Zero both the display counter and the threshold index.
-        // Resetting LastThresholdIndex means the next block that fires (even a high-numbered one)
-        // will be treated as new and get counted. iOS won't replay old events unless monitoring
-        // is restarted, so this is safe to do without triggering a flood of replays.
+        // Resetting LastThresholdIndex means the next threshold callback will be treated as new.
+        // In this build, includesPastActivity is disabled, so setup/restarts don't backfill old usage.
         sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
         sharedDefaults?.set(0, forKey: "LastThresholdIndex")
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
@@ -547,7 +520,7 @@ class CloudKitManager: ObservableObject {
         sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")
         sharedDefaults?.removeObject(forKey: "LastExtensionCloudUploadAttempt")
 
-        print("🔄 Reset local block count to 0 — uploading to CloudKit...")
+        print(" Reset local block count to 0 — uploading to CloudKit...")
 
         // Push 0 blocks to CloudKit right now so friends see the reset instantly
         database.fetch(withRecordID: myUserProfileRecordID) { [weak self] record, error in
@@ -569,9 +542,9 @@ class CloudKitManager: ObservableObject {
             self.database.save(profileRecord) { [weak self] _, saveError in
                 guard let self else { completion?(); return }
                 if let saveError {
-                    print("❌ Reset upload failed: \(saveError.localizedDescription)")
+                    print(" Reset upload failed: \(saveError.localizedDescription)")
                 } else {
-                    print("✅ Reset uploaded to CloudKit")
+                    print(" Reset uploaded to CloudKit")
                 }
                 Task { @MainActor [weak self] in
                     await self?.refreshGroupNow(reason: "reset")
@@ -590,6 +563,6 @@ class CloudKitManager: ObservableObject {
         clearCache()
         sharedDefaults?.removeObject(forKey: AppConstants.Keys.dailyBlocksUsed)
         sharedDefaults?.removeObject(forKey: AppConstants.Keys.lastBlockDate)
-        print("🔄 All data reset")
+        print(" All data reset")
     }
 }

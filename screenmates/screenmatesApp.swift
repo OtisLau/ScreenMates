@@ -25,13 +25,13 @@ struct ScreenMatesApp: App {
                     // If it did, silently restart it so tracking resumes immediately.
                     let activities = DeviceActivityCenter().activities
                     if !activities.contains(DeviceActivityName("dailyTracking")) {
-                        print("⚠️ Monitoring was dead on foreground — auto-restarting")
+                        print(" Monitoring was dead on foreground — auto-restarting")
                         MonitoringManager.shared.restartMonitoring()
                         return
                     }
 
-                    // If the currently registered batch is exhausted (e.g. block 20/40/60
-                    // in 20-event test mode), auto-register the next batch so tracking
+                    // If the currently registered batch is exhausted (e.g. block 96/192
+                    // in 96-event mode), auto-register the next batch so tracking
                     // doesn't silently stall.
                     let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
                     let lastIndex = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
@@ -41,7 +41,7 @@ struct ScreenMatesApp: App {
                     // Self-heal a known stale test state: high threshold index with zero blocks
                     // usually means counters were reset but old high-index events stayed registered.
                     if AppConstants.isTestMode && lastIndex >= AppConstants.eventsPerMonitoringBatch && blocks == 0 {
-                        print("⚠️ Stale monitoring state detected (\(lastIndex), 0 blocks) — resetting index + restarting")
+                        print(" Stale monitoring state detected (\(lastIndex), 0 blocks) — resetting index + restarting")
                         sharedDefaults?.set(0, forKey: "LastThresholdIndex")
                         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
                         MonitoringManager.shared.restartMonitoring()
@@ -53,14 +53,14 @@ struct ScreenMatesApp: App {
                         lastIndex < AppConstants.maxTrackableBlocksPerDay
 
                     if exhaustedBatch && lastAutoRollover != lastIndex {
-                        print("⚠️ Batch exhausted at block_\(lastIndex) — auto-registering next batch")
+                        print(" Batch exhausted at block_\(lastIndex) — auto-registering next batch")
                         sharedDefaults?.set(lastIndex, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
                         MonitoringManager.shared.restartMonitoring()
                     }
                 }
         }
         .backgroundTask(.appRefresh(AppConstants.backgroundTaskIdentifier)) {
-            print("🌙 Background task triggered at \(Date())")
+            print(" Background task triggered at \(Date())")
             let result = await cloudManager.performBackgroundCheckDetailed()
             
             // Log this background sync attempt
@@ -73,7 +73,7 @@ struct ScreenMatesApp: App {
                 )
             }
             
-            print(result.success ? "✅ Background check succeeded" : "❌ Background check failed")
+            print(result.success ? " Background check succeeded" : " Background check failed")
             
             // Re-schedule for next time
             await MainActor.run {
@@ -88,9 +88,9 @@ struct ScreenMatesApp: App {
         
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("✅ Background refresh scheduled for ~15 min from now")
+            print(" Background refresh scheduled for ~15 min from now")
         } catch {
-            print("❌ Failed to schedule background refresh: \(error)")
+            print(" Failed to schedule background refresh: \(error)")
         }
     }
     

@@ -1,6 +1,6 @@
 # ScreenMates - Quick Start Guide
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### 1. Build & Run
 ```bash
@@ -31,7 +31,7 @@ open screenmates.xcodeproj
 
 ---
 
-## 📱 Using the App
+##  Using the App
 
 ### Dashboard
 - **Top Card:** Your stats (blocks used, streak, time until reset)
@@ -53,7 +53,7 @@ You'll get notified when:
 
 ---
 
-## ⚙️ Settings
+##  Settings
 
 ### Profile
 - **Edit Name:** Change your display name
@@ -78,7 +78,7 @@ You'll get notified when:
 
 ---
 
-## 🔧 Test Mode
+##  Test Mode
 
 ### Current Settings
 - **1 minute = 1 block** (for easy testing)
@@ -100,7 +100,7 @@ This makes 15 minutes = 1 block (production setting)
 
 ---
 
-## 🐛 Debugging
+##  Debugging
 
 ### Data Not Syncing?
 1. Check internet connection
@@ -126,7 +126,7 @@ This makes 15 minutes = 1 block (production setting)
 
 ---
 
-## 📊 Understanding Your Stats
+##  Understanding Your Stats
 
 ### Blocks Used
 - Number of time blocks consumed today
@@ -151,7 +151,7 @@ This makes 15 minutes = 1 block (production setting)
 
 ---
 
-## 👥 Using with Friends
+##  Using with Friends
 
 ### Create a Group
 1. Tap "Create New Group"
@@ -174,7 +174,7 @@ This makes 15 minutes = 1 block (production setting)
 
 ---
 
-## 🎯 Tips & Best Practices
+##  Tips & Best Practices
 
 ### For Accountability
 - Share daily screenshots with friends
@@ -196,7 +196,7 @@ This makes 15 minutes = 1 block (production setting)
 
 ---
 
-## 🔄 Daily Reset
+##  Daily Reset
 
 ### What Happens at Midnight?
 1. **Blocks reset** to 0 automatically
@@ -212,7 +212,7 @@ This makes 15 minutes = 1 block (production setting)
 
 ---
 
-## 🆘 Troubleshooting
+##  Troubleshooting
 
 ### "Group Not Found"
 - Group code might be wrong
@@ -238,7 +238,7 @@ This makes 15 minutes = 1 block (production setting)
 
 ---
 
-## 📱 System Requirements
+##  System Requirements
 
 - iOS 16.0 or later
 - Screen Time enabled
@@ -247,7 +247,7 @@ This makes 15 minutes = 1 block (production setting)
 
 ---
 
-## 🎓 Next Steps
+##  Next Steps
 
 ### Learn More
 - Read `IMPLEMENTATION_SUMMARY.md` for technical details
@@ -262,7 +262,7 @@ This makes 15 minutes = 1 block (production setting)
 
 ---
 
-## 🎉 You're Ready!
+##  You're Ready!
 
 Start tracking your screen time with friends and building better habits together!
 

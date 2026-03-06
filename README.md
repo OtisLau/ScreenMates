@@ -1,19 +1,19 @@
-# ScreenMates 📱
+# ScreenMates 
 
 A social accountability app for iOS that tracks daily screen time and syncs it with friends in real-time. Stay accountable, build streaks, and compete on a live leaderboard!
 
-## ✨ Features
+##  Features
 
-- **🎯 Track Screen Time:** Monitor time spent on distracting apps
-- **👥 Social Groups:** Join friends and see everyone's usage
-- **🔥 Streak Counter:** Build momentum by staying under your limit
-- **📊 Live Leaderboard:** Real-time rankings of all group members
-- **🔔 Smart Notifications:** Warnings at 75%, 90%, and when over limit
-- **☁️ CloudKit Sync:** Automatic syncing across the group
-- **💪 Offline Support:** Works offline with local caching
-- **🛠️ Debug Tools:** Comprehensive testing and troubleshooting
+- ** Track Screen Time:** Monitor time spent on distracting apps
+- ** Social Groups:** Join friends and see everyone's usage
+- ** Streak Counter:** Build momentum by staying under your limit
+- ** Live Leaderboard:** Real-time rankings of all group members
+- ** Smart Notifications:** Warnings at 75%, 90%, and when over limit
+- ** CloudKit Sync:** Automatic syncing across the group
+- ** Offline Support:** Works offline with local caching
+- ** Debug Tools:** Comprehensive testing and troubleshooting
 
-## 🏗️ Architecture
+##  Architecture
 
 Built with a clean, modular architecture:
 
@@ -24,7 +24,7 @@ Built with a clean, modular architecture:
 
 Total: **20 focused files**, each under 200 lines for easy maintenance.
 
-## 🚀 Quick Start
+##  Quick Start
 
 1. Open `screenmates.xcodeproj` in Xcode
 2. Build and run on your device (iOS 16.0+)
@@ -37,13 +37,13 @@ Total: **20 focused files**, each under 200 lines for easy maintenance.
 
 See **[QUICK_START.md](QUICK_START.md)** for detailed instructions.
 
-## 📚 Documentation
+##  Documentation
 
 - **[QUICK_START.md](QUICK_START.md)** - How to use the app
 - **[ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md)** - How the code works
 - **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - What was built
 
-## 🔧 Tech Stack
+##  Tech Stack
 
 - **Language:** Swift / SwiftUI
 - **Backend:** CloudKit (Public Database)
@@ -54,7 +54,7 @@ See **[QUICK_START.md](QUICK_START.md)** for detailed instructions.
   - BackgroundTasks (background syncing)
 - **Storage:** UserDefaults (App Group for data sharing)
 
-## 🧪 Test Mode
+##  Test Mode
 
 Currently configured for easy testing:
 - **1 minute = 1 block** (production: 15 minutes)
@@ -62,7 +62,7 @@ Currently configured for easy testing:
 
 Change in `AppConstants.swift` to switch to production mode.
 
-## 📊 Project Stats
+##  Project Stats
 
 | Metric | Value |
 |--------|-------|
@@ -74,23 +74,23 @@ Change in `AppConstants.swift` to switch to production mode.
 | Models | 3 files |
 | Utilities | 3 files |
 
-## 🎯 Design Philosophy
+##  Design Philosophy
 
 **Functionality over visual polish.**
 
 This app prioritizes:
-- ✅ Robust error handling
-- ✅ Reliable data syncing
-- ✅ Clean code organization
-- ✅ Comprehensive debug tools
-- ✅ Offline support
+-  Robust error handling
+-  Reliable data syncing
+-  Clean code organization
+-  Comprehensive debug tools
+-  Offline support
 
 Not focused on:
-- ❌ Fancy animations
-- ❌ Complex visual designs
-- ❌ Unnecessary features
+-  Fancy animations
+-  Complex visual designs
+-  Unnecessary features
 
-## 🤝 How It Works
+##  How It Works
 
 ### The Flow
 
@@ -108,7 +108,7 @@ Not focused on:
 - **Background Tasks:** Syncs even when app is closed
 - **Local Cache:** Shows data immediately, fetches in background
 
-## 🐛 Debugging
+##  Debugging
 
 Built-in debug menu accessible via Settings:
 - View all UserDefaults values
@@ -118,21 +118,21 @@ Built-in debug menu accessible via Settings:
 - Clear local data
 - View CloudKit status
 
-## 📱 Requirements
+##  Requirements
 
 - iOS 16.0 or later
 - Screen Time enabled
 - iCloud account
 - Internet connection (for syncing)
 
-## 🔐 Privacy
+##  Privacy
 
 - **No activity logs:** Only tracks total time, not which apps
 - **No screenshots:** Never captures screen content
 - **User controlled:** You choose what gets tracked
 - **Group only:** Data only shared with your group
 
-## 🎓 Learning Resources
+##  Learning Resources
 
 The codebase is designed for learning:
 - Small, focused files (avg 82 lines)
@@ -147,7 +147,7 @@ Start with:
 3. `DashboardView.swift` - See reactive UI
 4. `AppConstants.swift` - View configuration
 
-## 🚧 Future Enhancements (Optional)
+##  Future Enhancements (Optional)
 
 - Historical data tracking
 - Weekly/monthly summaries
@@ -156,11 +156,11 @@ Start with:
 - Export data
 - User avatars
 
-## 📄 License
+##  License
 
 Private project. All rights reserved.
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 Built with modern Swift best practices:
 - Async/await for concurrency

@@ -1,6 +1,6 @@
 # ScreenMates - Architecture Guide
 
-## 🏗️ How It All Works Together
+##  How It All Works Together
 
 ### Data Flow
 
@@ -18,7 +18,7 @@ DeviceActivityMonitor (Extension)
 
 ---
 
-## 🔄 User Journey
+##  User Journey
 
 ### 1. First Launch → Onboarding
 - **OnboardingView** shows
@@ -48,7 +48,7 @@ DeviceActivityMonitor (Extension)
 
 ---
 
-## 📦 Manager Responsibilities
+##  Manager Responsibilities
 
 ### CloudKitManager
 **Purpose:** All CloudKit operations + local caching
@@ -96,7 +96,7 @@ DeviceActivityMonitor (Extension)
 
 ---
 
-## 💾 Data Storage
+##  Data Storage
 
 ### UserDefaults (App Group)
 **Suite:** `group.com.otishlau.screenmates`
@@ -144,7 +144,7 @@ DeviceActivityMonitor (Extension)
 
 ---
 
-## 🎨 View Architecture
+##  View Architecture
 
 ### ContentView (Traffic Controller)
 **Role:** Route to correct screen based on state
@@ -174,7 +174,7 @@ DashboardView
 
 ---
 
-## ⚡ Real-Time Updates
+##  Real-Time Updates
 
 ### Timer-Based (Dashboard)
 ```swift
@@ -198,7 +198,7 @@ ForEach(cloudManager.groupMembers) { ... }
 
 ---
 
-## 🛠️ Error Handling Flow
+##  Error Handling Flow
 
 ### 1. Error Occurs
 CloudKit operation fails → Error caught
@@ -226,7 +226,7 @@ cloudManager.lastError = appError
 
 ---
 
-## 🔧 Debug Workflow
+##  Debug Workflow
 
 ### 1. Access Debug Menu
 Dashboard → Settings → Debug Menu
@@ -245,7 +245,7 @@ Dashboard → Settings → Debug Menu
 
 ---
 
-## 📱 Background Task Flow
+##  Background Task Flow
 
 ### 1. App Goes to Background
 ```swift
@@ -276,7 +276,7 @@ BGAppRefreshTaskRequest
 
 ---
 
-## 🎯 Key Design Decisions
+##  Key Design Decisions
 
 ### Why App Group?
 - DeviceActivity extension runs in separate process
@@ -306,14 +306,14 @@ BGAppRefreshTaskRequest
 
 ---
 
-## 📊 Performance Considerations
+##  Performance Considerations
 
 ### Optimizations
-- ✅ Cache leaderboard data locally
-- ✅ Debounce frequent updates
-- ✅ Use async/await for concurrency
-- ✅ Retry logic prevents repeated failures
-- ✅ Optimistic updates (update UI first)
+-  Cache leaderboard data locally
+-  Debounce frequent updates
+-  Use async/await for concurrency
+-  Retry logic prevents repeated failures
+-  Optimistic updates (update UI first)
 
 ### Trade-offs
 - Leaderboard may be slightly stale (up to 60s)
@@ -323,7 +323,7 @@ BGAppRefreshTaskRequest
 
 ---
 
-## 🚀 Extending the App
+##  Extending the App
 
 ### To Add a New Feature:
 
@@ -346,7 +346,7 @@ BGAppRefreshTaskRequest
 
 ---
 
-## 🎓 Learning the Codebase
+##  Learning the Codebase
 
 ### Start here:
 1. **ContentView.swift** - Understand the routing
@@ -362,7 +362,7 @@ BGAppRefreshTaskRequest
 
 ---
 
-## 🏁 Summary
+##  Summary
 
 The architecture is designed to be:
 - **Modular** - Small, focused files
@@ -371,4 +371,4 @@ The architecture is designed to be:
 - **Testable** - Isolated business logic
 - **Understandable** - Self-documenting code
 
-Each piece has a clear role and works together seamlessly! 🎉
+Each piece has a clear role and works together seamlessly! 

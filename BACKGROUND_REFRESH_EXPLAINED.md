@@ -1,12 +1,12 @@
 # Background Refresh - How It Works
 
-## 🎯 What We Have
+##  What We Have
 
 Your app uses **iOS Background App Refresh** to upload screen time data to CloudKit even when the app is closed.
 
 ---
 
-## ✅ Current Setup
+##  Current Setup
 
 ### 1. **Info.plist Configuration**
 ```xml
@@ -48,19 +48,19 @@ init() {
 
 ---
 
-## 📱 How iOS Background Refresh Works
+##  How iOS Background Refresh Works
 
 ### iOS Decides When to Run
 Apple's iOS is in charge, not your app. The system considers:
 
-✅ **More Likely to Run:**
+ **More Likely to Run:**
 - Device is charging
 - Connected to WiFi
 - Good battery level
 - User frequently uses your app
 - App has been backgrounded for a while
 
-❌ **Less Likely to Run:**
+ **Less Likely to Run:**
 - Battery is low
 - Low Power Mode is ON
 - Device is busy with other tasks
@@ -76,7 +76,7 @@ Apple's iOS is in charge, not your app. The system considers:
 
 ---
 
-## 🔍 How to Verify It's Working
+##  How to Verify It's Working
 
 ### Method 1: Check Debug Menu (Easiest)
 1. Use tracked apps with ScreenMates closed
@@ -99,23 +99,23 @@ Apple's iOS is in charge, not your app. The system considers:
 4. Leave device connected
 5. Watch console for:
    ```
-   🌙 Background task triggered at ...
-   ✅ Background Sync: Uploaded X blocks
-   ✅ Background check succeeded
+    Background task triggered at ...
+    Background Sync: Uploaded X blocks
+    Background check succeeded
    ```
 
 ---
 
-## 🧪 Testing Tips
+##  Testing Tips
 
 ### Best Testing Conditions
 ```
-✅ Device plugged in and charging
-✅ Connected to WiFi
-✅ Low Power Mode OFF
-✅ Background App Refresh ON (Settings → General)
-✅ App closed for 30+ minutes
-✅ Device not actively in use
+ Device plugged in and charging
+ Connected to WiFi
+ Low Power Mode OFF
+ Background App Refresh ON (Settings → General)
+ App closed for 30+ minutes
+ Device not actively in use
 ```
 
 ### Quick Test
@@ -140,7 +140,7 @@ e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWith
 
 ---
 
-## 🔧 Troubleshooting
+##  Troubleshooting
 
 ### "No background syncs happening"
 
@@ -155,10 +155,10 @@ e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWith
 3. Debug Menu → Check if any errors
 
 **Common Issues:**
-- ❌ Low Power Mode enabled → Disables background refresh
-- ❌ Not enough time passed → First run takes 30+ min
-- ❌ Device battery very low → iOS delays tasks
-- ❌ App just installed → iOS learning usage patterns
+-  Low Power Mode enabled → Disables background refresh
+-  Not enough time passed → First run takes 30+ min
+-  Device battery very low → iOS delays tasks
+-  App just installed → iOS learning usage patterns
 
 ### "Syncs happening but not frequently"
 
@@ -190,23 +190,23 @@ This is **normal iOS behavior**. iOS decides when to run based on:
 
 ---
 
-## 📊 What Gets Synced
+##  What Gets Synced
 
 Every background refresh:
-1. ✅ Reads `DailyBlocksUsed` from shared UserDefaults
-2. ✅ Uploads to your CloudKit UserProfile
-3. ✅ Updates `last_updated` timestamp
-4. ✅ Syncs `streak` data
-5. ✅ Logs the sync event (visible in Debug Menu)
+1.  Reads `DailyBlocksUsed` from shared UserDefaults
+2.  Uploads to your CloudKit UserProfile
+3.  Updates `last_updated` timestamp
+4.  Syncs `streak` data
+5.  Logs the sync event (visible in Debug Menu)
 
 **Does NOT sync:**
-- ❌ Which apps you used (privacy)
-- ❌ Screen content
-- ❌ App activity logs
+-  Which apps you used (privacy)
+-  Screen content
+-  App activity logs
 
 ---
 
-## ⚙️ Technical Details
+##  Technical Details
 
 ### Task Type: BGAppRefreshTask
 - **Purpose:** Quick, lightweight syncs
@@ -221,14 +221,14 @@ Every background refresh:
 - App refresh is perfect for quick syncs
 
 ### Energy Impact
-- ✅ Very low (just uploads a few numbers)
-- ✅ Only runs when iOS determines it's OK
-- ✅ Doesn't drain battery significantly
-- ✅ iOS will throttle if battery is low
+-  Very low (just uploads a few numbers)
+-  Only runs when iOS determines it's OK
+-  Doesn't drain battery significantly
+-  iOS will throttle if battery is low
 
 ---
 
-## 🎓 Understanding the Flow
+##  Understanding the Flow
 
 ### Full Lifecycle
 
@@ -273,7 +273,7 @@ DeviceActivity Extension
 
 ---
 
-## 💡 Pro Tips
+##  Pro Tips
 
 ### Maximize Reliability
 1. **Enable all settings:** Background App Refresh, Notifications
@@ -297,28 +297,28 @@ DeviceActivity Extension
 
 ---
 
-## ✅ Success Indicators
+##  Success Indicators
 
 Your background refresh is working if:
-1. ✅ Debug Menu shows "Last Background Sync" with recent time
-2. ✅ Sync History shows multiple entries over time
-3. ✅ Timestamps are 15-60 minutes apart
-4. ✅ Friend sees your blocks update without you opening app
-5. ✅ Syncs show green checkmarks (success)
+1.  Debug Menu shows "Last Background Sync" with recent time
+2.  Sync History shows multiple entries over time
+3.  Timestamps are 15-60 minutes apart
+4.  Friend sees your blocks update without you opening app
+5.  Syncs show green checkmarks (success)
 
 ---
 
-## 🎉 Summary
+##  Summary
 
 **You have background refresh working!** 
 
-- ✅ Configured in Info.plist
-- ✅ Scheduled on app launch
-- ✅ Re-scheduled after each run
-- ✅ Uploads blocks to CloudKit
-- ✅ Logs every sync attempt
-- ✅ Visible in Debug Menu
+-  Configured in Info.plist
+-  Scheduled on app launch
+-  Re-scheduled after each run
+-  Uploads blocks to CloudKit
+-  Logs every sync attempt
+-  Visible in Debug Menu
 
 **iOS will run it every 15-60 minutes** (closer to 15 when charging on WiFi).
 
-Check the Debug Menu to see your sync history! 🚀
+Check the Debug Menu to see your sync history! 

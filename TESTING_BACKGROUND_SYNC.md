@@ -1,11 +1,11 @@
 # Testing Background Sync
 
-## 🎯 Goal
+##  Goal
 Verify that your app uploads block data to CloudKit even when it's **closed**, not just when you open it.
 
 ---
 
-## 🧪 Test Method 1: Simple Test (Recommended)
+##  Test Method 1: Simple Test (Recommended)
 
 ### Step 1: Setup
 1. **Build and run the app**
@@ -29,14 +29,14 @@ Verify that your app uploads block data to CloudKit even when it's **closed**, n
 5. **Go to Debug Menu** → Check "Last Background Sync"
 6. **Tap "Sync History"** → See the background sync events
 
-### ✅ Success Criteria
+###  Success Criteria
 - Last Background Sync shows a recent timestamp
 - Sync History shows entries while app was closed
 - Friend sees your updated blocks without you opening the app
 
 ---
 
-## 🧪 Test Method 2: Simulator Test (Advanced)
+##  Test Method 2: Simulator Test (Advanced)
 
 ### Setup Background Task Simulation
 1. **Run app in Xcode Simulator**
@@ -53,13 +53,13 @@ Verify that your app uploads block data to CloudKit even when it's **closed**, n
 
 ### Verify
 7. **Check Xcode console** for:
-   - `🌙 Background task triggered at ...`
-   - `✅ Background Sync: Uploaded X blocks`
+   - ` Background task triggered at ...`
+   - ` Background Sync: Uploaded X blocks`
 8. **Open app** → Debug Menu → Check sync history
 
 ---
 
-## 🧪 Test Method 3: Real Device Test (Most Reliable)
+##  Test Method 3: Real Device Test (Most Reliable)
 
 ### Why Real Device?
 - Simulators don't reliably test background tasks
@@ -77,7 +77,7 @@ Verify that your app uploads block data to CloudKit even when it's **closed**, n
 8. **Check Debug Menu** → "Last Background Sync"
 9. **Should show sync happened while app was closed**
 
-### 🔍 Debugging Tips
+###  Debugging Tips
 - Background tasks run more frequently when **device is charging**
 - iOS may delay tasks if **battery is low**
 - Tasks won't run if **Low Power Mode** is enabled
@@ -85,14 +85,14 @@ Verify that your app uploads block data to CloudKit even when it's **closed**, n
 
 ---
 
-## 📊 Reading the Sync History
+##  Reading the Sync History
 
-### Green Checkmark ✅
+### Green Checkmark 
 - Sync succeeded
 - Data uploaded to CloudKit
 - Friends can see your updated blocks
 
-### Red X ❌
+### Red X 
 - Sync failed
 - Possible causes:
   - No internet connection
@@ -110,7 +110,7 @@ Verify that your app uploads block data to CloudKit even when it's **closed**, n
 
 ---
 
-## 🎓 Understanding Background Tasks
+##  Understanding Background Tasks
 
 ### How It Works
 1. **App goes to background** → schedules task for 15 min later
@@ -120,11 +120,11 @@ Verify that your app uploads block data to CloudKit even when it's **closed**, n
 5. **Repeats** when app enters background again
 
 ### iOS Scheduling Rules
-- ✅ **Runs more often** when device is charging
-- ✅ **Runs more often** when on WiFi vs cellular
-- ❌ **Delayed or skipped** if battery is low
-- ❌ **Never runs** in Low Power Mode
-- ❌ **Might delay** if you're actively using device
+-  **Runs more often** when device is charging
+-  **Runs more often** when on WiFi vs cellular
+-  **Delayed or skipped** if battery is low
+-  **Never runs** in Low Power Mode
+-  **Might delay** if you're actively using device
 
 ### Typical Behavior
 - **Best case:** Task runs every 15-20 minutes
@@ -133,7 +133,7 @@ Verify that your app uploads block data to CloudKit even when it's **closed**, n
 
 ---
 
-## 🔧 Debug Menu Features
+##  Debug Menu Features
 
 ### View Background Sync Status
 - **Last Background Sync** - When did it last run?
@@ -146,7 +146,7 @@ Verify that your app uploads block data to CloudKit even when it's **closed**, n
 
 ---
 
-## 🚨 Troubleshooting
+##  Troubleshooting
 
 ### "No background syncs yet"
 **Possible causes:**
@@ -183,25 +183,25 @@ Verify that your app uploads block data to CloudKit even when it's **closed**, n
 
 ---
 
-## ✅ Success Indicators
+##  Success Indicators
 
 You know background sync is working when:
-1. ✅ "Last Background Sync" shows recent time (while app was closed)
-2. ✅ Sync History shows multiple entries over time
-3. ✅ Friend sees your blocks update without you opening the app
-4. ✅ Timestamps in history are spaced 15-60 minutes apart
-5. ✅ Most syncs show green checkmarks (success)
+1.  "Last Background Sync" shows recent time (while app was closed)
+2.  Sync History shows multiple entries over time
+3.  Friend sees your blocks update without you opening the app
+4.  Timestamps in history are spaced 15-60 minutes apart
+5.  Most syncs show green checkmarks (success)
 
 ---
 
-## 📱 Pro Tips
+##  Pro Tips
 
 ### Best Conditions for Testing
-- ✅ Device plugged in and charging
-- ✅ Connected to WiFi
-- ✅ Low Power Mode OFF
-- ✅ App has been closed for 30+ minutes
-- ✅ Device not in active use
+-  Device plugged in and charging
+-  Connected to WiFi
+-  Low Power Mode OFF
+-  App has been closed for 30+ minutes
+-  Device not in active use
 
 ### Quick Test
 1. Use tracked apps for 3 minutes (get 3 blocks)
@@ -219,7 +219,7 @@ You know background sync is working when:
 
 ---
 
-## 🎉 Summary
+##  Summary
 
 **To test background sync:**
 1. Use tracked apps to get blocks
@@ -228,4 +228,4 @@ You know background sync is working when:
 4. Open app → Settings → Debug Menu
 5. Check "Last Background Sync" and "Sync History"
 
-**You'll know it's working when you see sync events that happened while the app was closed!** 🚀
+**You'll know it's working when you see sync events that happened while the app was closed!** 

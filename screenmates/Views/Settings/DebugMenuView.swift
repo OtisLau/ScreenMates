@@ -108,11 +108,11 @@ struct DebugMenuView: View {
                         let status = AuthorizationCenter.shared.authorizationStatus
                         switch status {
                         case .approved:
-                            Text("Approved ✅").foregroundColor(.green)
+                            Text("Approved ").foregroundColor(.green)
                         case .denied:
-                            Text("DENIED ❌").foregroundColor(.red)
+                            Text("DENIED ").foregroundColor(.red)
                         case .notDetermined:
-                            Text("Not determined ⚠️").foregroundColor(.orange)
+                            Text("Not determined ").foregroundColor(.orange)
                         @unknown default:
                             Text("Unknown (\(String(describing: status)))").foregroundColor(.orange)
                         }
@@ -124,10 +124,10 @@ struct DebugMenuView: View {
                         Text("Monitoring active")
                         Spacer()
                         if monitoringActive {
-                            Text("Yes ✅")
+                            Text("Yes ")
                                 .foregroundColor(.green)
                         } else {
-                            Text("No ⚠️ — tap Restart Monitoring")
+                            Text("No  — tap Restart Monitoring")
                                 .foregroundColor(.orange)
                         }
                     }
@@ -154,7 +154,7 @@ struct DebugMenuView: View {
                                 .font(.caption)
                                 .foregroundColor(total == 0 ? .red : .secondary)
                         } else {
-                            Text("None saved ⚠️")
+                            Text("None saved ")
                                 .foregroundColor(.red)
                         }
                     }
@@ -223,7 +223,7 @@ struct DebugMenuView: View {
                                     .foregroundColor(.secondary)
                             }
                             if let success = lastUploadSucceeded {
-                                Text(success ? "✅ Reached CloudKit" : "❌ Failed")
+                                Text(success ? " Reached CloudKit" : " Failed")
                                     .font(.caption)
                                     .foregroundColor(success ? .green : .red)
                             }

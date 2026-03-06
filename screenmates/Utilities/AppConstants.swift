@@ -32,9 +32,8 @@ struct AppConstants {
     static let productionEventsPerBatch = 96
     static let eventsPerMonitoringBatch = isTestMode ? testModeEventsPerBatch : productionEventsPerBatch
 
-    // Whether event registration should include already-accumulated usage from earlier in the day.
-    // For test mode we keep this OFF to avoid replay-driven jumps when restarting monitoring.
-    static let includesPastActivity = !isTestMode
+    // Always track from setup onward only (no same-day replay of historical usage).
+    static let includesPastActivity = false
 
     // Absolute ceiling for thresholds/blocks in one day based on block size.
     // This is separate from eventsPerMonitoringBatch.
@@ -81,10 +80,7 @@ struct AppConstants {
         // Config values mirrored into App Group so the extension and widget can read them
         static let sharedBlockSizeMinutes   = "SharedBlockSizeMinutes"
         static let sharedUploadThrottle     = "SharedUploadThrottleSeconds" // extension reads this
-        static let sharedIncludesPastActivity = "SharedIncludesPastActivity"
-
-        // Written by OnboardingView just before startMonitoring() so the extension can
-        // distinguish "iOS replay of old events" from "new usage after setup."
+        // Timestamp of the last start/restart of monitoring (for debug display only).
         static let monitoringSetupTimestamp = "MonitoringSetupTimestamp"
 
         // Last threshold index where we already performed automatic batch rollover.

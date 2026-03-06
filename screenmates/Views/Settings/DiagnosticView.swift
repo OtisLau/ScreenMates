@@ -79,18 +79,18 @@ struct DiagnosticView: View {
         var result = "=== DIAGNOSTICS ===\n\n"
         
         // Check basic setup
-        result += "✓ Setup Done: \(cloudManager.isSetupDone)\n"
-        result += "✓ Username Set: \(cloudManager.usernameSet)\n\n"
+        result += " Setup Done: \(cloudManager.isSetupDone)\n"
+        result += " Username Set: \(cloudManager.usernameSet)\n\n"
         
         // Check user data
         result += "USER DATA:\n"
         result += "  ID: \(cloudManager.myID)\n"
         result += "  Name: '\(cloudManager.myDisplayName)'\n"
         if cloudManager.myDisplayName.isEmpty {
-            result += "  ❌ DISPLAY NAME IS EMPTY!\n"
+            result += "   DISPLAY NAME IS EMPTY!\n"
             result += "     This is why you're not in leaderboard!\n"
         } else {
-            result += "  ✅ Display name is set\n"
+            result += "   Display name is set\n"
         }
         result += "\n"
         
@@ -98,15 +98,15 @@ struct DiagnosticView: View {
         result += "GROUP DATA:\n"
         result += "  Group ID: '\(cloudManager.myGroupID)'\n"
         if cloudManager.myGroupID.isEmpty {
-            result += "  ❌ No group joined\n"
+            result += "   No group joined\n"
         } else {
-            result += "  ✅ In group \(cloudManager.myGroupID)\n"
+            result += "   In group \(cloudManager.myGroupID)\n"
         }
         result += "  Members: \(cloudManager.groupMembers.count)\n"
         if cloudManager.groupMembers.isEmpty {
-            result += "  ❌ No members loaded\n"
+            result += "   No members loaded\n"
         } else {
-            result += "  ✅ Members loaded:\n"
+            result += "   Members loaded:\n"
             for member in cloudManager.groupMembers {
                 result += "     - \(member.displayName) (\(member.blocks) blocks)\n"
             }
@@ -120,7 +120,7 @@ struct DiagnosticView: View {
             result += "  (\(DateHelpers.relativeTime(from: lastSync)))\n"
         } else {
             result += "SYNC STATUS:\n"
-            result += "  ❌ Never synced\n"
+            result += "   Never synced\n"
         }
         
         diagnosticResult = result
@@ -129,7 +129,7 @@ struct DiagnosticView: View {
     private func fixDisplayName() {
         cloudManager.myDisplayName = "TestUser"
         cloudManager.usernameSet = true
-        diagnosticResult += "\n\n✅ Set display name to 'TestUser'\n"
+        diagnosticResult += "\n\n Set display name to 'TestUser'\n"
         diagnosticResult += "Now forcing sync...\n"
         
         cloudManager.updateMyProfile {
@@ -141,7 +141,7 @@ struct DiagnosticView: View {
     }
     
     private func forceSync() {
-        diagnosticResult += "\n\n🔄 Forcing sync...\n"
+        diagnosticResult += "\n\n Forcing sync...\n"
         
         print("=== FORCE SYNC START ===")
         print("User ID: \(cloudManager.myID)")
@@ -149,7 +149,7 @@ struct DiagnosticView: View {
         print("Group ID: \(cloudManager.myGroupID)")
         
         cloudManager.updateMyProfile {
-            print("✅ updateMyProfile completed")
+            print(" updateMyProfile completed")
             
             cloudManager.fetchGroupData(useCache: false)
             
@@ -161,30 +161,30 @@ struct DiagnosticView: View {
     }
     
     private func checkCloudKit() {
-        diagnosticResult += "\n\n🔍 Checking CloudKit...\n"
+        diagnosticResult += "\n\n Checking CloudKit...\n"
         
         // Check iCloud account status
         cloudManager.container.accountStatus { status, error in
             DispatchQueue.main.async {
                 if let error = error {
-                    self.diagnosticResult += "❌ Account check failed: \(error.localizedDescription)\n"
+                    self.diagnosticResult += " Account check failed: \(error.localizedDescription)\n"
                     return
                 }
                 
                 switch status {
                 case .available:
-                    self.diagnosticResult += "✅ iCloud account is available\n"
+                    self.diagnosticResult += " iCloud account is available\n"
                 case .noAccount:
-                    self.diagnosticResult += "❌ NO iCloud ACCOUNT!\n"
+                    self.diagnosticResult += " NO iCloud ACCOUNT!\n"
                     self.diagnosticResult += "   Fix: Settings → Sign in to iCloud\n"
                 case .restricted:
-                    self.diagnosticResult += "❌ iCloud is RESTRICTED\n"
+                    self.diagnosticResult += " iCloud is RESTRICTED\n"
                 case .couldNotDetermine:
-                    self.diagnosticResult += "⚠️ Could not determine iCloud status\n"
+                    self.diagnosticResult += " Could not determine iCloud status\n"
                 case .temporarilyUnavailable:
-                    self.diagnosticResult += "⚠️ iCloud temporarily unavailable\n"
+                    self.diagnosticResult += " iCloud temporarily unavailable\n"
                 @unknown default:
-                    self.diagnosticResult += "⚠️ Unknown iCloud status\n"
+                    self.diagnosticResult += " Unknown iCloud status\n"
                 }
                 
                 // Now try to fetch
@@ -196,7 +196,7 @@ struct DiagnosticView: View {
                         self.runDiagnostics()
                     }
                 } else {
-                    self.diagnosticResult += "❌ No group ID to check\n"
+                    self.diagnosticResult += " No group ID to check\n"
                 }
             }
         }
@@ -217,20 +217,20 @@ struct DiagnosticView: View {
                 let status = try await cloudManager.container.accountStatus()
                 switch status {
                 case .available:
-                    lines.append("Account: ✅ available")
+                    lines.append("Account:  available")
                 case .noAccount:
-                    lines.append("Account: ❌ no iCloud account signed in")
+                    lines.append("Account:  no iCloud account signed in")
                 case .restricted:
-                    lines.append("Account: ❌ restricted")
+                    lines.append("Account:  restricted")
                 case .couldNotDetermine:
-                    lines.append("Account: ⚠️ could not determine")
+                    lines.append("Account:  could not determine")
                 case .temporarilyUnavailable:
-                    lines.append("Account: ⚠️ temporarily unavailable")
+                    lines.append("Account:  temporarily unavailable")
                 @unknown default:
-                    lines.append("Account: ⚠️ unknown status")
+                    lines.append("Account:  unknown status")
                 }
             } catch {
-                lines.append("Account: ❌ status check failed: \(error.localizedDescription)")
+                lines.append("Account:  status check failed: \(error.localizedDescription)")
                 await MainActor.run {
                     diagnosticResult += lines.joined(separator: "\n") + "\n"
                     isPingingCloudKit = false
@@ -244,18 +244,18 @@ struct DiagnosticView: View {
                 let predicate = NSPredicate(format: "user_id == %@", cloudManager.myID)
                 let query = CKQuery(recordType: "UserProfile", predicate: predicate)
                 let (matchResults, _) = try await cloudManager.database.records(matching: query)
-                lines.append("Read: ✅ ok (\(matchResults.count) matching UserProfile record(s))")
+                lines.append("Read:  ok (\(matchResults.count) matching UserProfile record(s))")
                 readSucceeded = true
             } catch {
                 if let ckError = error as? CKError {
-                    lines.append("Read: ❌ CKError(\(ckError.code.rawValue)): \(ckError.localizedDescription)")
+                    lines.append("Read:  CKError(\(ckError.code.rawValue)): \(ckError.localizedDescription)")
                     if ckError.code == .unknownItem,
                        ckError.localizedDescription.localizedCaseInsensitiveContains("Did not find record type") {
                         lines.append("  Hint: CloudKit schema is missing for 'UserProfile' in this environment.")
                         lines.append("  Fix: Create/deploy the record types in CloudKit Dashboard.")
                     }
                 } else {
-                    lines.append("Read: ❌ \(error.localizedDescription)")
+                    lines.append("Read:  \(error.localizedDescription)")
                 }
             }
 
@@ -263,13 +263,13 @@ struct DiagnosticView: View {
             // We run this even if the read failed, because a successful write can create schema in Development
             // (and it gives a more actionable error in Production).
             if cloudManager.myDisplayName.isEmpty {
-                lines.append("Write: ⏭️ skipped (display name is empty)")
+                lines.append("Write: ⏭ skipped (display name is empty)")
             } else {
                 let writeResult = await cloudManager.performBackgroundCheckDetailed()
                 if writeResult.success {
-                    lines.append("Write: ✅ ok (saved UserProfile)")
+                    lines.append("Write:  ok (saved UserProfile)")
                 } else {
-                    lines.append("Write: ❌ failed")
+                    lines.append("Write:  failed")
                     if let msg = writeResult.errorMessage, !msg.isEmpty {
                         lines.append("  \(msg)")
                     }

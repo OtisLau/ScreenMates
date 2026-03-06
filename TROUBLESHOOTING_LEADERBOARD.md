@@ -1,12 +1,12 @@
 # Troubleshooting: "No Members Yet" in Leaderboard
 
-## 🐛 The Problem
+##  The Problem
 
 You and your friend joined the same group, but the leaderboard shows "No Members Yet" even though you're both in the group.
 
 ---
 
-## 🔍 What I Fixed
+##  What I Fixed
 
 ### Issue #1: Profile Not Created
 **Problem:** When joining a group, if your display name wasn't set, the app would skip creating your CloudKit profile entirely.
@@ -31,28 +31,28 @@ cloudManager.updateMyProfile {
 
 ---
 
-## 🧪 How to Test It's Fixed
+##  How to Test It's Fixed
 
 ### Step 1: Check Debug Menu
 1. Open **Settings** (gear icon)
 2. Tap **Debug Menu**
 3. Look at **CloudKit Data** section
 4. Check:
-   - ✅ **Display Name:** Should NOT say "NOT SET"
-   - ✅ **Group ID:** Should match your group code
-   - ✅ **Group Members:** Should show count > 0
+   -  **Display Name:** Should NOT say "NOT SET"
+   -  **Group ID:** Should match your group code
+   -  **Group Members:** Should show count > 0
 
 ### Step 2: Check Xcode Console
 Look for these logs:
 ```
-📤 updateMyProfile called
+ updateMyProfile called
    - User ID: ABC12345
    - Display Name: YourName  ← Should NOT be empty!
    - Group ID: 1FBA13
    - Blocks: 0
    - Streak: 0
-✅ Cloud: Profile Created
-✅ Fetched 2 group members  ← Should see your members!
+ Cloud: Profile Created
+ Fetched 2 group members  ← Should see your members!
 ```
 
 ### Step 3: Manual Force Sync
@@ -63,12 +63,12 @@ Look for these logs:
 
 ---
 
-## 🚨 If Still Not Working
+##  If Still Not Working
 
 ### Check #1: Is Display Name Set?
 ```
 Settings → Debug Menu → CloudKit Data
-Display Name: "NOT SET"  ← ❌ This is the problem!
+Display Name: "NOT SET"  ←  This is the problem!
 ```
 
 **Solution:**
@@ -94,17 +94,17 @@ Group ID: 1FBA13  ← Must match exactly!
 ### Check #3: Is Profile Created in CloudKit?
 **Check Xcode console for:**
 ```
-✅ Cloud: Profile Created
+ Cloud: Profile Created
 ```
 or
 ```
-✅ Cloud: Profile Updated
+ Cloud: Profile Updated
 ```
 
 **If you see:**
 ```
-⚠️ Display name not set, skipping profile update
-   ❌ This is why you're not showing in leaderboard!
+ Display name not set, skipping profile update
+    This is why you're not showing in leaderboard!
 ```
 
 **Solution:** Set your display name in Settings!
@@ -112,12 +112,12 @@ or
 ### Check #4: Is fetchGroupData Working?
 **Check console for:**
 ```
-✅ Fetched X group members
+ Fetched X group members
 ```
 
 **If you see:**
 ```
-❌ Fetch failed: [error]
+ Fetch failed: [error]
 ```
 
 **Possible causes:**
@@ -133,7 +133,7 @@ or
 
 ---
 
-## 🔧 Manual Fix Steps
+##  Manual Fix Steps
 
 If leaderboard still shows "No Members Yet":
 
@@ -163,10 +163,10 @@ If leaderboard still shows "No Members Yet":
 
 ---
 
-## 🎯 Most Common Causes
+##  Most Common Causes
 
 ### 1. Display Name Not Set (90% of cases)
-**Symptom:** Console shows "⚠️ Display name not set, skipping profile update"
+**Symptom:** Console shows " Display name not set, skipping profile update"
 
 **Fix:** Set your name in Settings → Edit Display Name
 
@@ -187,19 +187,19 @@ If leaderboard still shows "No Members Yet":
 
 ---
 
-## ✅ Success Criteria
+##  Success Criteria
 
 Your leaderboard is working when:
 
-1. ✅ Debug Menu shows Display Name is set
-2. ✅ Debug Menu shows Group Members count > 0
-3. ✅ Console shows "✅ Fetched X group members"
-4. ✅ Dashboard shows members in leaderboard
-5. ✅ Refresh works (pull down dashboard)
+1.  Debug Menu shows Display Name is set
+2.  Debug Menu shows Group Members count > 0
+3.  Console shows " Fetched X group members"
+4.  Dashboard shows members in leaderboard
+5.  Refresh works (pull down dashboard)
 
 ---
 
-## 📱 Quick Test with Simulator + Phone
+##  Quick Test with Simulator + Phone
 
 ### Setup
 1. **Simulator:** Complete onboarding, set name "SimUser", create group "TEST01"
@@ -218,13 +218,13 @@ Your leaderboard is working when:
 
 ---
 
-## 🎉 After the Fix
+##  After the Fix
 
 Once you've set your display name and synced:
-- ✅ Your profile is in CloudKit
-- ✅ Friends can see you in their leaderboard
-- ✅ You can see friends in your leaderboard
-- ✅ Real-time updates work
-- ✅ Background sync keeps you updated
+-  Your profile is in CloudKit
+-  Friends can see you in their leaderboard
+-  You can see friends in your leaderboard
+-  Real-time updates work
+-  Background sync keeps you updated
 
-**Build and run again - it should work now!** 🚀
+**Build and run again - it should work now!** 

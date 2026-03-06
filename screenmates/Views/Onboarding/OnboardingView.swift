@@ -126,7 +126,7 @@ struct OnboardingView: View {
                 if center.authorizationStatus == .approved {
                     permissionGranted = true
                 } else {
-                    print("❌ Permission error: \(error)")
+                    print(" Permission error: \(error)")
                     authErrorMessage = "Screen Time authorization failed: \(error.localizedDescription)\n\nIf you previously granted access, try force-quitting the app and reopening. Otherwise, ensure Screen Time is enabled and try again."
                     showAuthError = true
                 }
@@ -158,7 +158,7 @@ struct OnboardingView: View {
             selection.webDomainTokens.isEmpty &&
             selection.categoryTokens.count >= AppConstants.allCategoryTokenCountForAllActivityFallback
         if useAllActivityFallback {
-            print("⚠️ Using all-activity fallback because all categories appear selected")
+            print(" Using all-activity fallback because all categories appear selected")
         }
         
         for i in 1...checkpoints {
@@ -200,10 +200,7 @@ struct OnboardingView: View {
         do {
             deviceActivityCenter.stopMonitoring()
 
-            // Stamp the current time so the extension can tell the difference between
-            // "iOS replay of old accumulated usage" and "new usage after setup."
-            // Any threshold callback arriving within 15 seconds of this stamp is a replay
-            // and will be skipped — only genuinely new events get counted.
+            // Stamp when monitoring was configured so debug views can show last setup time.
             let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
             sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
             sharedDefaults?.set(0, forKey: "LastThresholdIndex")
@@ -216,7 +213,7 @@ struct OnboardingView: View {
                 during: schedule,
                 events: events
             )
-            print("✅ Monitoring Started with \(events.count) Checkpoints")
+            print(" Monitoring Started with \(events.count) Checkpoints")
 
             // Persist the selection so MonitoringManager can restart monitoring later
             // (e.g. from the debug menu after exhausting the current event batch in test mode)
@@ -226,17 +223,13 @@ struct OnboardingView: View {
             cloudManager.isSetupDone = true
             isStartingMonitoring = false
 
-            // iOS replays all already-exceeded thresholds within ~15 seconds of startMonitoring().
-            // Wait 20 seconds for replay to settle, then upload the baseline so group members
-            // see your real current screen time right away — not 0.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
-                Task { @MainActor in
-                    await CloudKitManager.shared.refreshGroupNow(reason: "setup-baseline")
-                }
+            // Push initial 0-state right away so leaderboard reflects the new setup quickly.
+            Task { @MainActor in
+                await CloudKitManager.shared.refreshGroupNow(reason: "setup")
             }
             
         } catch {
-            print("❌ Error starting monitoring: \(error)")
+            print(" Error starting monitoring: \(error)")
             isStartingMonitoring = false
         }
     }

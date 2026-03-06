@@ -29,7 +29,7 @@ class MonitoringManager {
     func saveSelection(_ selection: FamilyActivitySelection) {
         if let encoded = try? JSONEncoder().encode(selection) {
             defaults.set(encoded, forKey: selectionKey)
-            print("💾 Activity selection saved")
+            print(" Activity selection saved")
         }
     }
 
@@ -42,7 +42,7 @@ class MonitoringManager {
     func restartMonitoring() {
         guard let data = defaults.data(forKey: selectionKey),
               let selection = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data) else {
-            print("❌ No saved selection — open the app from scratch to reconfigure monitoring")
+            print(" No saved selection — open the app from scratch to reconfigure monitoring")
             return
         }
 
@@ -66,7 +66,7 @@ class MonitoringManager {
             selection.webDomainTokens.isEmpty &&
             selection.categoryTokens.count >= AppConstants.allCategoryTokenCountForAllActivityFallback
         if useAllActivityFallback {
-            print("⚠️ Restart monitoring using all-activity fallback")
+            print(" Restart monitoring using all-activity fallback")
         }
         for i in 1...AppConstants.eventsPerMonitoringBatch {
             let index   = lastIndex + i
@@ -107,7 +107,7 @@ class MonitoringManager {
         }
 
         guard !events.isEmpty else {
-            print("⚠️ No valid events to register — already at the 24-hour ceiling")
+            print(" No valid events to register — already at the 24-hour ceiling")
             return
         }
 
@@ -120,15 +120,14 @@ class MonitoringManager {
         let center = DeviceActivityCenter()
         center.stopMonitoring()
 
-        // Stamp now so the extension can distinguish iOS replay events (first 15 s after
-        // startMonitoring) from genuinely new usage — same logic as in onboarding.
+        // Stamp when monitoring was last started (debug visibility).
         sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
 
         do {
             try center.startMonitoring(DeviceActivityName("dailyTracking"), during: schedule, events: events)
-            print("✅ Monitoring restarted from block_\(lastIndex + 1) with \(events.count) events")
+            print(" Monitoring restarted from block_\(lastIndex + 1) with \(events.count) events")
         } catch {
-            print("❌ Failed to restart monitoring: \(error)")
+            print(" Failed to restart monitoring: \(error)")
         }
     }
 }

@@ -32,7 +32,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
         let sharedDefaults = UserDefaults(suiteName: suiteName)
         guard let sharedDefaults else {
-            print("❌ App Group UserDefaults unavailable for suite '\(suiteName)'")
+            print(" App Group UserDefaults unavailable for suite '\(suiteName)'")
             return
         }
 
@@ -58,39 +58,17 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let thresholdIndex = parseThresholdIndex(from: event.rawValue) ?? 0
         let lastIndex = sharedDefaults.integer(forKey: "LastThresholdIndex")
 
-        // When includesPastActivity is enabled and startMonitoring() is called mid-day,
-        // iOS immediately fires callbacks for every threshold already exceeded today.
-        // We stamp MonitoringSetupTimestamp just before startMonitoring() so we can
-        // detect this replay window (first 15 seconds).
-        //
-        // During the replay window we use the events to build a baseline that reflects the
-        // user's real accumulated screen time for today (sourced directly from the OS).
-        // DailyBlocksUsed is set to the highest replayed threshold seen so far. The main app
-        // uploads this baseline ~20 seconds after setup once replay has settled.
-        // After the replay window, new events increment on top of that baseline as normal.
-        let setupTime = sharedDefaults.object(forKey: "MonitoringSetupTimestamp") as? Date ?? .distantPast
-        let includesPastActivity = sharedDefaults.object(forKey: "SharedIncludesPastActivity") as? Bool ?? true
-        let isSetupReplay = includesPastActivity && Date().timeIntervalSince(setupTime) < 15
-
         var currentBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
         if thresholdIndex > 0 {
             if thresholdIndex > lastIndex {
                 // Always advance the index so future deduplication works correctly.
                 sharedDefaults.set(thresholdIndex, forKey: "LastThresholdIndex")
-                if isSetupReplay {
-                    // Replay event — use it to raise the baseline but don't increment.
-                    // max() ensures the highest replayed threshold wins even with race conditions.
-                    let baseline = max(currentBlocks, thresholdIndex)
-                    sharedDefaults.set(baseline, forKey: "DailyBlocksUsed")
-                    return
-                }
                 currentBlocks += 1
             } else {
                 // Duplicate / out-of-order callback — ignore
                 return
             }
         } else {
-            if isSetupReplay { return }
             currentBlocks += 1
         }
 
@@ -103,12 +81,12 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         sharedDefaults.set(event.rawValue, forKey: "LastExtensionThresholdEvent")
         sharedDefaults.set(currentBlocks, forKey: "LastExtensionBlocksAtThreshold")
 
-        print("🧱 Threshold hit. Daily total: \(currentBlocks) blocks")
+        print(" Threshold hit. Daily total: \(currentBlocks) blocks")
 
         // 4. Update the current user's entry in the widget cache so the widget shows
         //    fresh data for the local user without waiting for a CloudKit round-trip.
         //    Then tell the widget to reload — but throttle to max once per 30 seconds
-        //    so rapid replay events don't hammer the widget process into an OOM kill.
+        //    so rapid threshold events don't hammer the widget process into an OOM kill.
         updateWidgetCache(sharedDefaults: sharedDefaults, currentBlocks: currentBlocks)
 
         // 5. Upload to CloudKit so friends see your updated count
@@ -218,9 +196,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
                 }
                 sharedDefaults.set(true, forKey: "LastExtensionCloudUploadSuccess")
                 sharedDefaults.removeObject(forKey: "LastExtensionCloudUploadError")
-                print("✅ Extension: uploaded \(currentBlocks) blocks to CloudKit")
+                print(" Extension: uploaded \(currentBlocks) blocks to CloudKit")
             } catch {
-                print("❌ Extension CloudKit upload failed: \(error.localizedDescription)")
+                print(" Extension CloudKit upload failed: \(error.localizedDescription)")
                 sharedDefaults.set(false, forKey: "LastExtensionCloudUploadSuccess")
                 sharedDefaults.set(error.localizedDescription, forKey: "LastExtensionCloudUploadError")
             }
