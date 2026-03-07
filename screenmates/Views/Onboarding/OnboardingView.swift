@@ -35,7 +35,7 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
             
             // Description
-            Text("To start, we need to know which apps you want to track.")
+            Text("To start, grant permission. App selection is optional in all-activity mode.")
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
@@ -66,9 +66,9 @@ struct OnboardingView: View {
                     isPickerPresented = true
                 } label: {
                     HStack {
-                        Text("2. Select Distracting Apps")
+                        Text("2. Select Distracting Apps (Optional)")
                         Spacer()
-                        if hasAnySelection {
+                        if AppConstants.monitorAllActivity || hasAnySelection {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                         }
@@ -80,22 +80,20 @@ struct OnboardingView: View {
                 }
                 
                 // Step 3: Continue button
-                if hasAnySelection {
-                    Button {
-                        startMonitoring()
-                    } label: {
-                        if isStartingMonitoring {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        } else {
-                            Text("3. Save & Continue")
-                        }
+                Button {
+                    startMonitoring()
+                } label: {
+                    if isStartingMonitoring {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    } else {
+                        Text("3. Save & Continue")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
-                    .disabled(isStartingMonitoring || !permissionGranted)
                 }
+                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+                .disabled(isStartingMonitoring || !permissionGranted)
             }
             .padding(.horizontal)
             
@@ -153,12 +151,13 @@ struct OnboardingView: View {
         let maxMinutesInDay = AppConstants.maxThresholdMinuteOfDay
         let checkpoints = min(AppConstants.eventsPerMonitoringBatch, AppConstants.maxTrackableBlocksPerDay)
 
-        let useAllActivityFallback =
-            selection.applicationTokens.isEmpty &&
-            selection.webDomainTokens.isEmpty &&
-            selection.categoryTokens.count >= AppConstants.allCategoryTokenCountForAllActivityFallback
-        if useAllActivityFallback {
-            print(" Using all-activity fallback because all categories appear selected")
+        let useAllActivity =
+            AppConstants.monitorAllActivity ||
+            (selection.applicationTokens.isEmpty &&
+             selection.webDomainTokens.isEmpty &&
+             selection.categoryTokens.count >= AppConstants.allCategoryTokenCountForAllActivityFallback)
+        if useAllActivity {
+            print(" Using all-activity monitoring")
         }
         
         for i in 1...checkpoints {
@@ -166,7 +165,7 @@ struct OnboardingView: View {
             let minutes = min(i * blockSize, maxMinutesInDay)
             let event: DeviceActivityEvent
             if #available(iOS 17.4, *) {
-                if useAllActivityFallback {
+                if useAllActivity {
                     event = DeviceActivityEvent(
                         threshold: DateComponents(minute: minutes),
                         includesPastActivity: AppConstants.includesPastActivity
@@ -181,7 +180,7 @@ struct OnboardingView: View {
                     )
                 }
             } else {
-                if useAllActivityFallback {
+                if useAllActivity {
                     event = DeviceActivityEvent(
                         threshold: DateComponents(minute: minutes)
                     )

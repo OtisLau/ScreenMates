@@ -46,15 +46,13 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         // reset on the first callback, properly zeroing both counters before counting begins.
         let lastDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? .distantPast
         if !Calendar.current.isDateInToday(lastDate) {
-            sharedDefaults.set(0, forKey: "DailyBlocksUsed")
-            sharedDefaults.set(0, forKey: "LastThresholdIndex")
+            performHardDayRolloverReset(sharedDefaults: sharedDefaults)
         }
 
         // 2. Update the block count
-        // Use LastThresholdIndex to filter out duplicate/replayed callbacks from iOS,
-        // but increment by 1 rather than using the raw threshold number.
-        // This means DailyBlocksUsed is always a clean "blocks since last reset" count,
-        // so zeroing DailyBlocksUsed is all a reset needs to do.
+        // Use LastThresholdIndex to dedupe callbacks and to recover skipped thresholds.
+        // If iOS delivers block_137 after block_96 (or after a day reset), add the delta
+        // rather than just +1 so local blocks stay aligned with real usage.
         let thresholdIndex = parseThresholdIndex(from: event.rawValue) ?? 0
         let lastIndex = sharedDefaults.integer(forKey: "LastThresholdIndex")
 
@@ -63,7 +61,8 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             if thresholdIndex > lastIndex {
                 // Always advance the index so future deduplication works correctly.
                 sharedDefaults.set(thresholdIndex, forKey: "LastThresholdIndex")
-                currentBlocks += 1
+                let delta = thresholdIndex - lastIndex
+                currentBlocks += delta
             } else {
                 // Duplicate / out-of-order callback — ignore
                 return
@@ -209,6 +208,16 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         guard raw.hasPrefix("block_") else { return nil }
         let suffix = raw.dropFirst("block_".count)
         return Int(suffix)
+    }
+
+    // Keep extension-side day reset behavior aligned with the app-side reset.
+    private func performHardDayRolloverReset(sharedDefaults: UserDefaults) {
+        sharedDefaults.set(0, forKey: "DailyBlocksUsed")
+        sharedDefaults.set(0, forKey: "LastThresholdIndex")
+        sharedDefaults.set(0, forKey: "LastAutoBatchRolloverIndex")
+        sharedDefaults.set(Date(), forKey: "LastBlockDate")
+        sharedDefaults.removeObject(forKey: "LastExtensionCloudUpload")
+        sharedDefaults.removeObject(forKey: "LastExtensionCloudUploadAttempt")
     }
 }
 

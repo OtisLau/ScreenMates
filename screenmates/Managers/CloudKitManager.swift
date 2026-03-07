@@ -1,6 +1,9 @@
 import CloudKit
 import SwiftUI
 import Combine
+#if canImport(UIKit)
+import UIKit
+#endif
 #if canImport(WidgetKit)
 import WidgetKit
 #endif
@@ -34,11 +37,11 @@ class CloudKitManager: ObservableObject {
     // Shared storage accessible by the ScreenTimeMonitor extension and widget
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
 
-    // Throttle widget timeline reloads to avoid OOM-killing the widget process
-    // (the widget self-refreshes every 15 min on its own; we only need to nudge it
-    //  when there's genuinely new data, and at most once every 2 minutes).
+    // Throttle widget timeline reloads to avoid OOM-killing the widget process.
+    // Use a faster cadence while app is active and a slower one in background.
     private var lastWidgetReload: Date = .distantPast
-    private let widgetReloadThrottle: TimeInterval = 2 * 60 // 2 minutes
+    private let widgetReloadThrottleForeground: TimeInterval = 30        // 30 seconds
+    private let widgetReloadThrottleBackground: TimeInterval = 15 * 60   // 15 minutes
 
     // The CloudKit record ID for this user — always the same so we never create duplicates
     private var myUserProfileRecordID: CKRecord.ID {
@@ -331,7 +334,8 @@ class CloudKitManager: ObservableObject {
             let members = try await fetchGroupMembersAsync()
             groupMembers = members
             lastSyncTime = Date()
-            cacheLeaderboardData()
+            let forceWidgetReload = reason == "pull-to-refresh" || reason == "manual" || reason == "appear"
+            cacheLeaderboardData(forceWidgetReload: forceWidgetReload)
         } catch {
             lastError = handleCloudKitError(error)
         }
@@ -452,16 +456,28 @@ class CloudKitManager: ObservableObject {
 
     // Save the group member list to App Group storage so the widget can read it
     // without needing to hit CloudKit directly.
-    private func cacheLeaderboardData() {
+    private func cacheLeaderboardData(forceWidgetReload: Bool = false) {
         if let encoded = try? JSONEncoder().encode(groupMembers) {
             sharedDefaults?.set(encoded, forKey: AppConstants.Keys.cachedLeaderboardData)
         }
-        // Throttle widget reloads to at most once every 2 minutes.
-        // The widget self-refreshes every 15 min anyway, and the 30-second dashboard
-        // timer was triggering constant widget process spawns → OOM kills on iOS 26.
+        // Throttle widget reloads dynamically:
+        // - active app: faster updates for visible UX
+        // - background app: conservative cadence for battery/stability
+        // Widget still has its own 15-minute timeline fallback.
         #if canImport(WidgetKit)
+        #if canImport(UIKit)
+        let isForeground = UIApplication.shared.applicationState == .active
+        #else
+        let isForeground = false
+        #endif
         let now = Date()
-        if now.timeIntervalSince(lastWidgetReload) >= widgetReloadThrottle {
+        if forceWidgetReload {
+            lastWidgetReload = now
+            WidgetCenter.shared.reloadTimelines(ofKind: "ScreenMatesGroupWidget")
+            return
+        }
+        let throttle = isForeground ? widgetReloadThrottleForeground : widgetReloadThrottleBackground
+        if now.timeIntervalSince(lastWidgetReload) >= throttle {
             lastWidgetReload = now
             WidgetCenter.shared.reloadTimelines(ofKind: "ScreenMatesGroupWidget")
         }

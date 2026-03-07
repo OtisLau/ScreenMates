@@ -12,6 +12,27 @@ class MonitoringManager {
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
     private let selectionKey = "SavedActivitySelection"
 
+    // Clears all per-day tracking state and stamps "today" as the active tracking day.
+    // Returns true when a reset was performed.
+    @discardableResult
+    func performHardDayRolloverResetIfNeeded(now: Date = Date()) -> Bool {
+        guard let sharedDefaults else { return false }
+
+        let lastBlockDate = sharedDefaults.object(forKey: AppConstants.Keys.lastBlockDate) as? Date ?? .distantPast
+        guard !Calendar.current.isDate(lastBlockDate, inSameDayAs: now) else { return false }
+
+        sharedDefaults.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
+        sharedDefaults.set(0, forKey: "LastThresholdIndex")
+        sharedDefaults.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
+        sharedDefaults.set(now, forKey: AppConstants.Keys.lastBlockDate)
+
+        // Remove upload throttles so the first post-midnight threshold uploads immediately.
+        sharedDefaults.removeObject(forKey: "LastExtensionCloudUpload")
+        sharedDefaults.removeObject(forKey: "LastExtensionCloudUploadAttempt")
+
+        return true
+    }
+
     // Returns the app / category / web-domain counts from the last saved selection.
     // Returns nil if no selection has been saved yet (user has never completed onboarding).
     var savedSelectionStats: (apps: Int, categories: Int, domains: Int)? {
@@ -40,20 +61,17 @@ class MonitoringManager {
     // e.g. if LastThresholdIndex = 96, new events are block_97…block_192 at minutes 97…192.
     // Since your current usage is ~96 min, block_97 hasn't fired yet → extension wakes on next use.
     func restartMonitoring() {
-        guard let data = defaults.data(forKey: selectionKey),
-              let selection = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data) else {
+        let selection: FamilyActivitySelection? = {
+            guard let data = defaults.data(forKey: selectionKey) else { return nil }
+            return try? JSONDecoder().decode(FamilyActivitySelection.self, from: data)
+        }()
+
+        if !AppConstants.monitorAllActivity && selection == nil {
             print(" No saved selection — open the app from scratch to reconfigure monitoring")
             return
         }
 
-        // If the last block was recorded on a previous day, reset the index and local count
-        // so the new day starts from block_1 with a clean baseline.
-        let lastBlockDate = sharedDefaults?.object(forKey: AppConstants.Keys.lastBlockDate) as? Date ?? .distantPast
-        if !Calendar.current.isDateInToday(lastBlockDate) {
-            sharedDefaults?.set(0, forKey: "LastThresholdIndex")
-            sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
-            sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-        }
+        _ = performHardDayRolloverResetIfNeeded()
 
         let lastIndex  = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
         let blockSize  = AppConstants.currentBlockSize
@@ -61,12 +79,13 @@ class MonitoringManager {
 
         // Build the next batch of events continuing from where we left off
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
-        let useAllActivityFallback =
-            selection.applicationTokens.isEmpty &&
-            selection.webDomainTokens.isEmpty &&
-            selection.categoryTokens.count >= AppConstants.allCategoryTokenCountForAllActivityFallback
-        if useAllActivityFallback {
-            print(" Restart monitoring using all-activity fallback")
+        let useAllActivity =
+            AppConstants.monitorAllActivity ||
+            (selection?.applicationTokens.isEmpty == true &&
+             selection?.webDomainTokens.isEmpty == true &&
+             (selection?.categoryTokens.count ?? 0) >= AppConstants.allCategoryTokenCountForAllActivityFallback)
+        if useAllActivity {
+            print(" Restart monitoring using all-activity mode")
         }
         for i in 1...AppConstants.eventsPerMonitoringBatch {
             let index   = lastIndex + i
@@ -75,12 +94,13 @@ class MonitoringManager {
 
             let event: DeviceActivityEvent
             if #available(iOS 17.4, *) {
-                if useAllActivityFallback {
+                if useAllActivity {
                     event = DeviceActivityEvent(
                         threshold: DateComponents(minute: minutes),
                         includesPastActivity: AppConstants.includesPastActivity
                     )
                 } else {
+                    guard let selection else { continue }
                     event = DeviceActivityEvent(
                         applications: selection.applicationTokens,
                         categories:   selection.categoryTokens,
@@ -90,11 +110,12 @@ class MonitoringManager {
                     )
                 }
             } else {
-                if useAllActivityFallback {
+                if useAllActivity {
                     event = DeviceActivityEvent(
                         threshold: DateComponents(minute: minutes)
                     )
                 } else {
+                    guard let selection else { continue }
                     event = DeviceActivityEvent(
                         applications: selection.applicationTokens,
                         categories:   selection.categoryTokens,

@@ -36,17 +36,6 @@ struct ScreenMatesApp: App {
                     let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
                     let lastIndex = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
                     let lastAutoRollover = sharedDefaults?.integer(forKey: AppConstants.Keys.lastAutoBatchRolloverIndex) ?? 0
-                    let blocks = sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
-
-                    // Self-heal a known stale test state: high threshold index with zero blocks
-                    // usually means counters were reset but old high-index events stayed registered.
-                    if AppConstants.isTestMode && lastIndex >= AppConstants.eventsPerMonitoringBatch && blocks == 0 {
-                        print(" Stale monitoring state detected (\(lastIndex), 0 blocks) — resetting index + restarting")
-                        sharedDefaults?.set(0, forKey: "LastThresholdIndex")
-                        sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-                        MonitoringManager.shared.restartMonitoring()
-                        return
-                    }
 
                     let exhaustedBatch = lastIndex > 0 &&
                         lastIndex % AppConstants.eventsPerMonitoringBatch == 0 &&

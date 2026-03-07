@@ -35,6 +35,10 @@ struct AppConstants {
     // Always track from setup onward only (no same-day replay of historical usage).
     static let includesPastActivity = false
 
+    // Force DeviceActivity to monitor all activity regardless of picker selection.
+    // Keep this true for maximum reliability in background tracking.
+    static let monitorAllActivity = true
+
     // Absolute ceiling for thresholds/blocks in one day based on block size.
     // This is separate from eventsPerMonitoringBatch.
     static let maxTrackableBlocksPerDay = thresholdEventsPerDay(for: currentBlockSize)

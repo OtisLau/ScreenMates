@@ -148,7 +148,11 @@ struct DebugMenuView: View {
                     HStack {
                         Text("Apps selected")
                         Spacer()
-                        if let s = stats {
+                        if AppConstants.monitorAllActivity {
+                            Text("All activity mode")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        } else if let s = stats {
                             let total = s.apps + s.categories + s.domains
                             Text("\(s.apps) apps · \(s.categories) cats · \(s.domains) domains")
                                 .font(.caption)
