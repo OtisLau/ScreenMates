@@ -51,6 +51,7 @@ Thumbs.db
 # IDE files
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -104,3 +105,14 @@ fastlane/test_output
 # Localization
 *.stringsdict
 *.strings
+
+# Local scratch / design folders
+MyAppReport/
+ui:ux/
+
+# Local doc drafts / notes
+ARCHITECTURE_GUIDE.md
+BACKGROUND_REFRESH_EXPLAINED.md
+IMPLEMENTATION_SUMMARY.md
+TESTING_BACKGROUND_SYNC.md
+TROUBLESHOOTING_LEADERBOARD.md
