@@ -12,7 +12,7 @@ struct AppConstants {
     // MARK: - Test Mode
     // Flip this to false before shipping to production.
     // It controls block size, how often the extension uploads, and how often the dashboard refreshes.
-    static let isTestMode = true
+    static let isTestMode = false
 
     // 0:00 -> 23:59 = 1439 total threshold minutes in a day.
     static let maxThresholdMinuteOfDay = (24 * 60) - 1
