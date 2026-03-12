@@ -236,6 +236,11 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     // Keeps large threshold jumps plausible: if iOS wakes us with a far-future block index
     // (e.g. block_96 right after setup), cap the recovered delta by elapsed time.
+    //
+    // Only applies within the first 20 minutes after fresh setup — the window where iOS
+    // might replay pre-setup activity despite includesPastActivity=false.
+    // After that window, we trust any delta iOS delivers: sequential callbacks can arrive
+    // in rapid succession when the extension was suspended, and clamping them drops real blocks.
     private func appliedDeltaForThresholdJump(
         rawDelta: Int,
         lastIndex: Int,
@@ -247,19 +252,6 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
         let secondsPerBlock = TimeInterval(max(blockSizeMinutes, 1) * 60)
         guard secondsPerBlock > 0 else { return rawDelta }
-
-        if let lastThresholdDate = sharedDefaults.object(forKey: lastThresholdDateKey) as? Date {
-            return clampDeltaIfNeeded(
-                rawDelta: rawDelta,
-                lastIndex: lastIndex,
-                thresholdIndex: thresholdIndex,
-                reason: "since-last-threshold",
-                referenceDate: lastThresholdDate,
-                secondsPerBlock: secondsPerBlock,
-                now: now,
-                sharedDefaults: sharedDefaults
-            )
-        }
 
         if let setupDate = sharedDefaults.object(forKey: monitoringSetupKey) as? Date {
             let setupAge = now.timeIntervalSince(setupDate)

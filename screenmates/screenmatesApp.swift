@@ -50,6 +50,29 @@ struct ScreenMatesApp: App {
         }
         .backgroundTask(.appRefresh(AppConstants.backgroundTaskIdentifier)) {
             print(" Background task triggered at \(Date())")
+
+            // Mirror the foreground exhausted-batch check so tracking doesn't stall
+            // when the user never brings the app to foreground after block_96.
+            let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
+            let lastIndex = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
+            let lastAutoRollover = sharedDefaults?.integer(forKey: AppConstants.Keys.lastAutoBatchRolloverIndex) ?? 0
+            let activities = DeviceActivityCenter().activities
+
+            if !activities.contains(DeviceActivityName("dailyTracking")) {
+                print(" Monitoring dead in background — auto-restarting")
+                MonitoringManager.shared.restartMonitoring()
+            } else {
+                let exhaustedBatch = lastIndex > 0 &&
+                    lastIndex % AppConstants.eventsPerMonitoringBatch == 0 &&
+                    lastIndex < AppConstants.maxTrackableBlocksPerDay
+
+                if exhaustedBatch && lastAutoRollover != lastIndex {
+                    print(" Batch exhausted at block_\(lastIndex) in background — rolling over")
+                    sharedDefaults?.set(lastIndex, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
+                    MonitoringManager.shared.restartMonitoring()
+                }
+            }
+
             let result = await cloudManager.performBackgroundCheckDetailed()
             
             // Log this background sync attempt
