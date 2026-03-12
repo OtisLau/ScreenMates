@@ -60,7 +60,11 @@ struct DashboardView: View {
                         } else if cloudManager.groupMembers.isEmpty {
                             emptyState
                         } else {
-                            memberList
+                            OceanIslandsView(
+                                members: cloudManager.groupMembers,
+                                currentUserID: cloudManager.myID
+                            )
+                            .padding(.horizontal)
                         }
                     }
 
@@ -97,17 +101,6 @@ struct DashboardView: View {
                     await cloudManager.refreshGroupNow(reason: "timer")
                 }
             }
-        }
-    }
-
-    // List of all group members sorted by most screen time
-    private var memberList: some View {
-        ForEach(cloudManager.groupMembers) { member in
-            GroupMemberRow(
-                member: member,
-                isCurrentUser: member.userID == cloudManager.myID
-            )
-            .padding(.horizontal)
         }
     }
 
