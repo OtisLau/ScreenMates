@@ -23,9 +23,12 @@ struct SocialGroup {
 
     // Convert to a CloudKit record for saving
     func toCKRecord() -> CKRecord {
-        let record = recordID != nil
-            ? CKRecord(recordType: "SocialGroup", recordID: recordID!)
-            : CKRecord(recordType: "SocialGroup")
+        let record: CKRecord
+        if let recordID {
+            record = CKRecord(recordType: "SocialGroup", recordID: recordID)
+        } else {
+            record = CKRecord(recordType: "SocialGroup")
+        }
         record["group_id"] = groupID
         record["member_count"] = memberCount
         record["created_date"] = createdDate

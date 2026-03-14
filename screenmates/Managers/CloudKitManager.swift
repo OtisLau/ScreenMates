@@ -80,8 +80,24 @@ class CloudKitManager: ObservableObject {
         guard !myGroupID.isEmpty else { return }
         guard myGroupID != lastSubscriptionGroupID else { return }
 
-        let subscriptionID = "group-userprofile-\(myGroupID)"
-        let predicate = NSPredicate(format: "group_id == %@", myGroupID)
+        let newGroupID = myGroupID
+
+        // Delete the old subscription first so stale silent pushes stop arriving for
+        // groups the user has left. CloudKit caps subscriptions at 400; orphaned ones
+        // accumulate silently across group changes and reinstalls.
+        if !lastSubscriptionGroupID.isEmpty {
+            let oldSubscriptionID = "group-userprofile-\(lastSubscriptionGroupID)"
+            database.delete(withSubscriptionID: oldSubscriptionID) { [weak self] _, error in
+                if let error {
+                    print(" Failed to delete old subscription '\(oldSubscriptionID)': \(error.localizedDescription)")
+                } else {
+                    print(" Deleted old subscription for group \(self?.lastSubscriptionGroupID ?? "")")
+                }
+            }
+        }
+
+        let subscriptionID = "group-userprofile-\(newGroupID)"
+        let predicate = NSPredicate(format: "group_id == %@", newGroupID)
 
         let subscription = CKQuerySubscription(
             recordType: "UserProfile",
@@ -95,14 +111,14 @@ class CloudKitManager: ObservableObject {
         info.shouldSendContentAvailable = true
         subscription.notificationInfo = info
 
-        database.save(subscription) { _, error in
+        database.save(subscription) { [weak self] _, error in
             if let error {
                 print(" CloudKit subscription failed: \(error.localizedDescription)")
                 return
             }
-            print(" Subscribed to group \(self.myGroupID)")
-            DispatchQueue.main.async {
-                self.lastSubscriptionGroupID = self.myGroupID
+            print(" Subscribed to group \(newGroupID)")
+            DispatchQueue.main.async { [weak self] in
+                self?.lastSubscriptionGroupID = newGroupID
             }
         }
     }
@@ -315,7 +331,11 @@ class CloudKitManager: ObservableObject {
     // CloudKit until it activates error-rate mitigation.
     @MainActor
     func refreshGroupNow(reason: String? = nil) async {
-        guard !myGroupID.isEmpty else { return }
+        // Snapshot the group ID at the start of the refresh. If the user leaves the group
+        // while the CloudKit fetch is in-flight, we discard the stale results instead of
+        // writing them back to groupMembers (which was already cleared by leaveGroup()).
+        let refreshingGroupID = myGroupID
+        guard !refreshingGroupID.isEmpty else { return }
         print(" Refreshing group (\(reason ?? ""))")
 
         isLoading = true
@@ -332,6 +352,11 @@ class CloudKitManager: ObservableObject {
 
         do {
             let members = try await fetchGroupMembersAsync()
+            // Only apply results if we're still in the same group we started refreshing for.
+            guard myGroupID == refreshingGroupID else {
+                print(" Discarding stale fetch results — group changed mid-refresh")
+                return
+            }
             groupMembers = members
             lastSyncTime = Date()
             let forceWidgetReload = reason == "pull-to-refresh" || reason == "manual" || reason == "appear"

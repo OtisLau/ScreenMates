@@ -5,7 +5,7 @@ import DeviceActivity
 @main
 struct ScreenMatesApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject var cloudManager = CloudKitManager.shared
+    @ObservedObject var cloudManager = CloudKitManager.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
