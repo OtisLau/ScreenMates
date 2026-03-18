@@ -1,87 +1,124 @@
 import SwiftUI
 import Combine
 
-// The main screen — shows your screen time and your group's screen time side by side.
-// Refreshes automatically every 60 seconds and whenever a silent push comes in.
+// Main dashboard — your time at top, group leaderboard below.
 struct DashboardView: View {
-    // @ObservedObject (not @StateObject) because DashboardView doesn't own the singleton —
-    // it just observes it. Using @StateObject here would give SwiftUI wrong ownership semantics.
     @ObservedObject var cloudManager = CloudKitManager.shared
-
     @State private var showingSettings = false
 
-    // Refresh the group data on a timer while the app is open.
-    // Interval is controlled by AppConstants — shorter in test mode, longer in production.
     let timer = Timer.publish(every: AppConstants.dashboardRefreshInterval, on: .main, in: .common).autoconnect()
 
-    // How many minutes the current user has used their phone today
     private var myMinutesUsed: Int {
         cloudManager.currentBlocksUsed * AppConstants.currentBlockSize
     }
 
+    private var sortedMembers: [MemberData] {
+        cloudManager.groupMembers.sorted { $0.blocks < $1.blocks }
+    }
+
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
+        NavigationStack {
+            ZStack(alignment: .top) {
+                // Dot grid sits behind everything
+                DotGridBackground()
 
-                    // Your own stats at the top
-                    UserStatsCard(
-                        minutesUsed: myMinutesUsed,
-                        displayName: cloudManager.myDisplayName
-                    )
-                    .padding(.horizontal)
+                ScrollView {
+                    VStack(spacing: 0) {
 
-                    // Group code so people can share it easily
-                    VStack(spacing: 4) {
-                        Text("group code")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(cloudManager.myGroupID)
-                            .font(.title2)
-                            .bold()
-                            .kerning(2)
-                    }
-                    .padding()
-                    .background(Color.purple.opacity(0.08))
-                    .cornerRadius(12)
+                        // Your stats — hero section, no card border
+                        UserStatsCard(
+                            minutesUsed: myMinutesUsed,
+                            displayName: cloudManager.myDisplayName,
+                            goalMinutes: cloudManager.dailyGoalMinutes
+                        )
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
 
-                    // Everyone in the group
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("GROUP")
-                            .font(.caption)
-                            .bold()
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
+                        // Divider before group
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.07))
+                            .frame(height: 1)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 4)
 
-                        if cloudManager.isLoading && cloudManager.groupMembers.isEmpty {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                        } else if cloudManager.groupMembers.isEmpty {
-                            emptyState
-                        } else {
-                            memberList
+                        // Group section
+                        VStack(spacing: 0) {
+                            // Group header row
+                            HStack {
+                                Text("GROUP")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .kerning(1.5)
+
+                                Spacer()
+
+                                Button {
+                                    UIPasteboard.general.string = cloudManager.myGroupID
+                                } label: {
+                                    Text(cloudManager.myGroupID)
+                                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                        .kerning(1.5)
+                                }
+                                .glassButtonStyle()
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.top, 24)
+                            .padding(.bottom, 12)
+
+                            // Member rows inside one contained glass card
+                            if cloudManager.isLoading && cloudManager.groupMembers.isEmpty {
+                                ProgressView()
+                                    .padding(40)
+                            } else if cloudManager.groupMembers.isEmpty {
+                                emptyState
+                            } else {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(sortedMembers.enumerated()), id: \.element.id) { index, member in
+                                        GroupMemberRow(
+                                            member: member,
+                                            isCurrentUser: member.userID == cloudManager.myID,
+                                            rank: index + 1
+                                        )
+
+                                        if index < sortedMembers.count - 1 {
+                                            Rectangle()
+                                                .fill(Color.primary.opacity(0.06))
+                                                .frame(height: 1)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 4)
+                                .glassCard(cornerRadius: AppTheme.cornerRadiusLarge)
+                                .padding(.horizontal, 24)
+                            }
                         }
-                    }
 
-                    // Show when we last got fresh data
-                    if let lastSync = cloudManager.lastSyncTime {
-                        Text("last updated \(DateHelpers.relativeTime(from: lastSync))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        // Sync footer
+                        if let lastSync = cloudManager.lastSyncTime {
+                            Text("synced \(DateHelpers.relativeTime(from: lastSync))")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
+                                .padding(.top, 20)
+                        }
+
+                        Spacer(minLength: 60)
                     }
                 }
-                .padding(.vertical)
-            }
-            .refreshable {
-                await cloudManager.refreshGroupNow(reason: "pull-to-refresh")
+                .refreshable {
+                    await cloudManager.refreshGroupNow(reason: "pull-to-refresh")
+                }
             }
             .navigationTitle("ScreenMates")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showingSettings = true } label: {
-                        Image(systemName: "gearshape.fill")
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .sheet(isPresented: $showingSettings) {
@@ -100,43 +137,15 @@ struct DashboardView: View {
         }
     }
 
-    // List of all group members sorted by most screen time
-    private var memberList: some View {
-        ForEach(cloudManager.groupMembers) { member in
-            GroupMemberRow(
-                member: member,
-                isCurrentUser: member.userID == cloudManager.myID
-            )
-            .padding(.horizontal)
-        }
-    }
-
-    // Shown when no group data has loaded yet
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "person.2.slash")
-                .font(.system(size: 50))
-                .foregroundColor(.secondary)
-
+        VStack(spacing: 8) {
             Text("No one here yet")
-                .font(.headline)
-
-            Text("Share your group code with friends to get started.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("Share your group code to invite friends.")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            Button {
-                cloudManager.updateMyProfile {
-                    cloudManager.fetchGroupData(useCache: false)
-                }
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-                    .font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)

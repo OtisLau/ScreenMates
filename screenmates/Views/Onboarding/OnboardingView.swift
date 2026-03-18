@@ -2,7 +2,19 @@ import SwiftUI
 import FamilyControls
 import DeviceActivity
 
-/// Initial onboarding for permissions and app selection
+// Button style helper for the onboarding continue button
+private struct OnboardingContinueButtonStyle: ViewModifier {
+    let enabled: Bool
+    func body(content: Content) -> some View {
+        if enabled {
+            content.glassProminentButtonStyle()
+        } else {
+            content.glassButtonStyle()
+        }
+    }
+}
+
+// Onboarding — permissions and app selection.
 struct OnboardingView: View {
     @ObservedObject var cloudManager = CloudKitManager.shared
 
@@ -12,7 +24,7 @@ struct OnboardingView: View {
     @State private var isStartingMonitoring = false
     @State private var showAuthError = false
     @State private var authErrorMessage = ""
-    
+
     let center = AuthorizationCenter.shared
 
     private var hasAnySelection: Bool {
@@ -20,89 +32,73 @@ struct OnboardingView: View {
     }
 
     var body: some View {
-        VStack(spacing: 30) {
+        VStack(spacing: 0) {
             Spacer()
-            
-            // Icon
-            Image(systemName: "hand.raised.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.purple)
-            
-            // Title
-            Text("Welcome to ScreenMates")
-                .font(.largeTitle)
-                .bold()
-                .multilineTextAlignment(.center)
-            
-            // Description
-            Text("To start, grant permission. App selection is optional in all-activity mode.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-            
-            Spacer()
-            
+
+            // Hero area
             VStack(spacing: 16) {
-                // Step 1: Grant Permissions
-                Button {
-                    requestPermissions()
-                } label: {
-                    HStack {
-                        Text("1. Grant Permissions")
-                        Spacer()
-                        if permissionGranted {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                        }
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(10)
-                }
-                
-                // Step 2: Select Apps
-                Button {
-                    isPickerPresented = true
-                } label: {
-                    HStack {
-                        Text("2. Select Distracting Apps (Optional)")
-                        Spacer()
-                        if AppConstants.monitorAllActivity || hasAnySelection {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                        }
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(10)
-                }
-                
-                // Step 3: Continue button
+                Image(systemName: "iphone.and.arrow.right.inward")
+                    .font(.system(size: 52))
+                    .foregroundStyle(AppTheme.accent)
+
+                Text("ScreenMates")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+
+                Text("Track your screen time with friends.\nSpend less time on your phone, together.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            Spacer()
+
+            // Step cards
+            VStack(spacing: 10) {
+                stepCard(
+                    number: 1,
+                    title: "Allow Screen Time Access",
+                    subtitle: "Required to track daily usage",
+                    icon: "hand.raised.fill",
+                    done: permissionGranted,
+                    action: requestPermissions
+                )
+
+                stepCard(
+                    number: 2,
+                    title: "Select Apps (Optional)",
+                    subtitle: AppConstants.monitorAllActivity || hasAnySelection ? "All activity tracked" : "Or track everything automatically",
+                    icon: "square.grid.2x2.fill",
+                    done: AppConstants.monitorAllActivity || hasAnySelection,
+                    action: { isPickerPresented = true }
+                )
+
+                // Continue button
                 Button {
                     startMonitoring()
                 } label: {
-                    if isStartingMonitoring {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    } else {
-                        Text("3. Save & Continue")
+                    HStack {
+                        if isStartingMonitoring {
+                            ProgressView()
+                        } else {
+                            Text("Get Started")
+                                .fontWeight(.semibold)
+                            Image(systemName: "arrow.right")
+                        }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
                 }
-                .buttonStyle(.borderedProminent)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
+                .modifier(OnboardingContinueButtonStyle(enabled: permissionGranted))
                 .disabled(isStartingMonitoring || !permissionGranted)
             }
-            .padding(.horizontal)
-            
-            Spacer()
+            .padding(.horizontal, 24)
+
+            Spacer(minLength: 48)
         }
         .familyActivityPicker(isPresented: $isPickerPresented, selection: $selection)
         .onAppear {
-            // If the device is already authorized (e.g. reinstall / previous run),
-            // treat that as granted so onboarding doesn't get stuck.
             permissionGranted = (center.authorizationStatus == .approved)
         }
         .alert("Screen Time Permission", isPresented: $showAuthError) {
@@ -111,43 +107,83 @@ struct OnboardingView: View {
             Text(authErrorMessage)
         }
     }
-    
+
+    // Reusable step card
+    private func stepCard(
+        number: Int,
+        title: String,
+        subtitle: String,
+        icon: String,
+        done: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                // Step number or checkmark
+                ZStack {
+                    Circle()
+                        .fill(done ? Color(UIColor.systemGreen).opacity(0.2) : Color(UIColor.tertiarySystemFill))
+                        .frame(width: 36, height: 36)
+                    if done {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Color(UIColor.systemGreen))
+                    } else {
+                        Text("\(number)")
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: done ? "checkmark.circle.fill" : "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundStyle(done ? Color(UIColor.systemGreen) : Color.secondary)
+            }
+            .padding(16)
+            .glassCard(cornerRadius: AppTheme.cornerRadiusLarge)
+        }
+        .buttonStyle(.plain)
+    }
+
     private func requestPermissions() {
         Task {
-            // Request FamilyControls
             do {
                 try await center.requestAuthorization(for: .individual)
                 permissionGranted = true
             } catch {
-                // Some devices throw `authorizationConflict` when already approved (or when a previous
-                // authorization exists). If status is approved, allow the flow to proceed.
                 if center.authorizationStatus == .approved {
                     permissionGranted = true
                 } else {
-                    print(" Permission error: \(error)")
-                    authErrorMessage = "Screen Time authorization failed: \(error.localizedDescription)\n\nIf you previously granted access, try force-quitting the app and reopening. Otherwise, ensure Screen Time is enabled and try again."
+                    authErrorMessage = "Screen Time authorization failed: \(error.localizedDescription)\n\nIf you previously granted access, try force-quitting and reopening the app."
                     showAuthError = true
                 }
             }
-            
         }
     }
-    
+
     private func startMonitoring() {
         isStartingMonitoring = true
-        
+
         let deviceActivityCenter = DeviceActivityCenter()
         let schedule = DeviceActivitySchedule(
             intervalStart: DateComponents(hour: 0, minute: 0),
             intervalEnd: DateComponents(hour: 23, minute: 59),
             repeats: true
         )
-        
-        // Create threshold events (checkpoints)
+
         let blockSize = AppConstants.currentBlockSize
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
-
-        // Keep thresholds within the day and cap this registration to one batch.
         let maxMinutesInDay = AppConstants.maxThresholdMinuteOfDay
         let checkpoints = min(AppConstants.eventsPerMonitoringBatch, AppConstants.maxTrackableBlocksPerDay)
 
@@ -156,10 +192,7 @@ struct OnboardingView: View {
             (selection.applicationTokens.isEmpty &&
              selection.webDomainTokens.isEmpty &&
              selection.categoryTokens.count >= AppConstants.allCategoryTokenCountForAllActivityFallback)
-        if useAllActivity {
-            print(" Using all-activity monitoring")
-        }
-        
+
         for i in 1...checkpoints {
             let eventName = DeviceActivityEvent.Name("block_\(i)")
             let minutes = min(i * blockSize, maxMinutesInDay)
@@ -181,9 +214,7 @@ struct OnboardingView: View {
                 }
             } else {
                 if useAllActivity {
-                    event = DeviceActivityEvent(
-                        threshold: DateComponents(minute: minutes)
-                    )
+                    event = DeviceActivityEvent(threshold: DateComponents(minute: minutes))
                 } else {
                     event = DeviceActivityEvent(
                         applications: selection.applicationTokens,
@@ -195,11 +226,9 @@ struct OnboardingView: View {
             }
             events[eventName] = event
         }
-        
+
         do {
             deviceActivityCenter.stopMonitoring()
-
-            // Stamp when monitoring was configured so debug views can show last setup time.
             let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
             sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
             sharedDefaults?.set(0, forKey: "LastThresholdIndex")
@@ -212,23 +241,16 @@ struct OnboardingView: View {
                 during: schedule,
                 events: events
             )
-            print(" Monitoring Started with \(events.count) Checkpoints")
 
-            // Persist the selection so MonitoringManager can restart monitoring later
-            // (e.g. from the debug menu after exhausting the current event batch in test mode)
             MonitoringManager.shared.saveSelection(selection)
-
-            // Mark setup as done
             cloudManager.isSetupDone = true
             isStartingMonitoring = false
 
-            // Push initial 0-state right away so leaderboard reflects the new setup quickly.
             Task { @MainActor in
                 await CloudKitManager.shared.refreshGroupNow(reason: "setup")
             }
-            
         } catch {
-            print(" Error starting monitoring: \(error)")
+            print("Error starting monitoring: \(error)")
             isStartingMonitoring = false
         }
     }

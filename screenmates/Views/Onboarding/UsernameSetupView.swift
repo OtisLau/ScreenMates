@@ -1,83 +1,114 @@
 import SwiftUI
 
-/// Username setup screen after onboarding
+private struct UsernameButtonStyle: ViewModifier {
+    let filled: Bool
+    func body(content: Content) -> some View {
+        if filled {
+            content.glassProminentButtonStyle()
+        } else {
+            content.glassButtonStyle()
+        }
+    }
+}
+
+// Username setup — shown once after onboarding completes.
 struct UsernameSetupView: View {
     @ObservedObject var cloudManager = CloudKitManager.shared
-    
+
     @State private var username = ""
     @State private var isLoading = false
     @State private var showError = false
-    
+
+    @FocusState private var isFocused: Bool
+
     var body: some View {
-        VStack(spacing: 30) {
+        VStack(spacing: 0) {
             Spacer()
-            
-            // Icon
-            Image(systemName: "person.circle.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.purple)
-            
-            // Title
-            Text("Choose Your Name")
-                .font(.largeTitle)
-                .bold()
-            
-            // Description
-            Text("This is how you'll appear to your friends in the leaderboard.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-            
+
+            VStack(spacing: 28) {
+                // Avatar placeholder
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.accent.opacity(0.15))
+                        .frame(width: 80, height: 80)
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 36))
+                        .foregroundStyle(AppTheme.accent)
+                }
+
+                VStack(spacing: 8) {
+                    Text("What's your name?")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+
+                    Text("This is how you'll appear to your friends")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                // Input field
+                VStack(spacing: 6) {
+                    TextField("", text: $username, prompt: Text("Enter your name").foregroundColor(.secondary))
+                        .font(.system(size: 22, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                        .autocapitalization(.words)
+                        .disableAutocorrection(true)
+                        .focused($isFocused)
+                        .padding(.vertical, 18)
+                        .glassCard(cornerRadius: AppTheme.cornerRadiusLarge)
+                        .padding(.horizontal)
+
+                    Text("\(username.count)/20")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
             Spacer()
-            
-            // Username input
-            VStack(spacing: 16) {
-                TextField("Enter your name", text: $username)
-                    .textFieldStyle(.roundedBorder)
-                    .autocapitalization(.words)
-                    .disableAutocorrection(true)
-                    .padding(.horizontal)
-                
-                Button {
-                    saveUsername()
-                } label: {
+
+            // Continue button
+            Button {
+                saveUsername()
+            } label: {
+                HStack {
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     } else {
                         Text("Continue")
+                            .fontWeight(.semibold)
+                        Image(systemName: "arrow.right")
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(username.isEmpty || isLoading)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal)
+                .padding(.vertical, 16)
             }
-            
-            Spacer()
+            .modifier(UsernameButtonStyle(filled: !username.isEmpty))
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
+            .disabled(username.isEmpty || isLoading)
         }
+        .onAppear { isFocused = true }
         .alert("Invalid Name", isPresented: $showError) {
-            Button("OK") { }
+            Button("OK") {}
         } message: {
             Text("Please enter a name between 1 and 20 characters.")
         }
     }
-    
+
     private func saveUsername() {
         let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        
         guard !trimmed.isEmpty && trimmed.count <= 20 else {
             showError = true
             return
         }
-        
+
         isLoading = true
         cloudManager.myDisplayName = trimmed
         cloudManager.usernameSet = true
-        // Mirror identity for extension and push initial profile to CloudKit.
         cloudManager.updateMyProfile()
-        
-        // Small delay for UX
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             isLoading = false
         }

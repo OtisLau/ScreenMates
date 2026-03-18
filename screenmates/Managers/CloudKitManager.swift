@@ -25,6 +25,9 @@ class CloudKitManager: ObservableObject {
     @AppStorage("is_setup_done") var isSetupDone: Bool = false
     @AppStorage("username_set") var usernameSet: Bool = false
 
+    // Daily screen time goal in minutes. Default = 120 min (2 hours).
+    @AppStorage("daily_goal_minutes") var dailyGoalMinutes: Int = 0
+
     // Tracks which group we last subscribed to so we don't re-subscribe every launch
     @AppStorage("last_subscription_group_id") private var lastSubscriptionGroupID: String = ""
 
