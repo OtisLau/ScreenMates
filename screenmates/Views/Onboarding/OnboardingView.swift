@@ -18,8 +18,6 @@ private struct OnboardingContinueButtonStyle: ViewModifier {
 struct OnboardingView: View {
     @ObservedObject var cloudManager = CloudKitManager.shared
 
-    @State private var selection = FamilyActivitySelection()
-    @State private var isPickerPresented = false
     @State private var permissionGranted = false
     @State private var isStartingMonitoring = false
     @State private var showAuthError = false
@@ -27,77 +25,68 @@ struct OnboardingView: View {
 
     let center = AuthorizationCenter.shared
 
-    private var hasAnySelection: Bool {
-        !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
+        ZStack {
+            AppBackground()
 
-            // Hero area
-            VStack(spacing: 16) {
-                Image(systemName: "iphone.and.arrow.right.inward")
-                    .font(.system(size: 52))
-                    .foregroundStyle(AppTheme.accent)
+            VStack(spacing: 0) {
+                Spacer()
 
-                Text("ScreenMates")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                // Hero area
+                VStack(spacing: 14) {
+                    Image(systemName: "iphone.and.arrow.right.inward")
+                        .font(.system(size: 48, weight: .light))
+                        .foregroundStyle(Color.primary.opacity(0.7))
 
-                Text("Track your screen time with friends.\nSpend less time on your phone, together.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
+                    Text("ScreenMates")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
 
-            Spacer()
-
-            // Step cards
-            VStack(spacing: 10) {
-                stepCard(
-                    number: 1,
-                    title: "Allow Screen Time Access",
-                    subtitle: "Required to track daily usage",
-                    icon: "hand.raised.fill",
-                    done: permissionGranted,
-                    action: requestPermissions
-                )
-
-                stepCard(
-                    number: 2,
-                    title: "Select Apps (Optional)",
-                    subtitle: AppConstants.monitorAllActivity || hasAnySelection ? "All activity tracked" : "Or track everything automatically",
-                    icon: "square.grid.2x2.fill",
-                    done: AppConstants.monitorAllActivity || hasAnySelection,
-                    action: { isPickerPresented = true }
-                )
-
-                // Continue button
-                Button {
-                    startMonitoring()
-                } label: {
-                    HStack {
-                        if isStartingMonitoring {
-                            ProgressView()
-                        } else {
-                            Text("Get Started")
-                                .fontWeight(.semibold)
-                            Image(systemName: "arrow.right")
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    Text("Track your screen time with friends.\nSpend less time on your phone, together.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
                 }
-                .modifier(OnboardingContinueButtonStyle(enabled: permissionGranted))
-                .disabled(isStartingMonitoring || !permissionGranted)
-            }
-            .padding(.horizontal, 24)
 
-            Spacer(minLength: 48)
+                Spacer()
+
+                // Step cards
+                VStack(spacing: 10) {
+                    stepCard(
+                        number: 1,
+                        title: "Allow Screen Time Access",
+                        subtitle: "Required to track daily usage",
+                        icon: "lock.shield.fill",
+                        done: permissionGranted,
+                        action: requestPermissions
+                    )
+
+                    // Continue button
+                    Button {
+                        startMonitoring()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isStartingMonitoring {
+                                ProgressView()
+                            } else {
+                                Text("Get Started")
+                                    .fontWeight(.semibold)
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                    }
+                    .modifier(OnboardingContinueButtonStyle(enabled: permissionGranted))
+                    .disabled(isStartingMonitoring || !permissionGranted)
+                }
+                .padding(.horizontal, 24)
+
+                Spacer(minLength: 48)
+            }
         }
-        .familyActivityPicker(isPresented: $isPickerPresented, selection: $selection)
         .onAppear {
             permissionGranted = (center.authorizationStatus == .approved)
         }
@@ -119,26 +108,21 @@ struct OnboardingView: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                // Step number or checkmark
+                // Icon in a rounded square
                 ZStack {
-                    Circle()
-                        .fill(done ? Color(UIColor.systemGreen).opacity(0.2) : Color(UIColor.tertiarySystemFill))
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.primary.opacity(0.08))
                         .frame(width: 36, height: 36)
-                    if done {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Color(UIColor.systemGreen))
-                    } else {
-                        Text("\(number)")
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
+                    Image(systemName: done ? "checkmark" : icon)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Color.primary.opacity(0.7))
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -146,9 +130,9 @@ struct OnboardingView: View {
 
                 Spacer()
 
-                Image(systemName: done ? "checkmark.circle.fill" : "chevron.right")
-                    .font(.system(size: 14))
-                    .foregroundStyle(done ? Color(UIColor.systemGreen) : Color.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
             .padding(16)
             .glassCard(cornerRadius: AppTheme.cornerRadiusLarge)
@@ -187,42 +171,17 @@ struct OnboardingView: View {
         let maxMinutesInDay = AppConstants.maxThresholdMinuteOfDay
         let checkpoints = min(AppConstants.eventsPerMonitoringBatch, AppConstants.maxTrackableBlocksPerDay)
 
-        let useAllActivity =
-            AppConstants.monitorAllActivity ||
-            (selection.applicationTokens.isEmpty &&
-             selection.webDomainTokens.isEmpty &&
-             selection.categoryTokens.count >= AppConstants.allCategoryTokenCountForAllActivityFallback)
-
         for i in 1...checkpoints {
             let eventName = DeviceActivityEvent.Name("block_\(i)")
             let minutes = min(i * blockSize, maxMinutesInDay)
             let event: DeviceActivityEvent
             if #available(iOS 17.4, *) {
-                if useAllActivity {
-                    event = DeviceActivityEvent(
-                        threshold: DateComponents(minute: minutes),
-                        includesPastActivity: AppConstants.includesPastActivity
-                    )
-                } else {
-                    event = DeviceActivityEvent(
-                        applications: selection.applicationTokens,
-                        categories: selection.categoryTokens,
-                        webDomains: selection.webDomainTokens,
-                        threshold: DateComponents(minute: minutes),
-                        includesPastActivity: AppConstants.includesPastActivity
-                    )
-                }
+                event = DeviceActivityEvent(
+                    threshold: DateComponents(minute: minutes),
+                    includesPastActivity: AppConstants.includesPastActivity
+                )
             } else {
-                if useAllActivity {
-                    event = DeviceActivityEvent(threshold: DateComponents(minute: minutes))
-                } else {
-                    event = DeviceActivityEvent(
-                        applications: selection.applicationTokens,
-                        categories: selection.categoryTokens,
-                        webDomains: selection.webDomainTokens,
-                        threshold: DateComponents(minute: minutes)
-                    )
-                }
+                event = DeviceActivityEvent(threshold: DateComponents(minute: minutes))
             }
             events[eventName] = event
         }
@@ -242,7 +201,7 @@ struct OnboardingView: View {
                 events: events
             )
 
-            MonitoringManager.shared.saveSelection(selection)
+
             cloudManager.isSetupDone = true
             isStartingMonitoring = false
 

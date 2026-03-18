@@ -117,32 +117,26 @@ private struct WidgetMemberRow: View {
     }
 }
 
-// MARK: - Dot grid background (widget-safe)
-// Single Path + one fill call — same technique as the main app but
-// scoped to the small widget canvas (~64 dots max vs ~200+ on a full screen).
-private struct WidgetDotGrid: View {
-    @Environment(\.colorScheme) private var colorScheme
+// MARK: - Dot grid background (widget-safe, no Canvas)
+// Uses a Path drawn via SwiftUI's Shape protocol instead of Canvas.
+// Shape rendering is cheaper in widget extensions than Canvas.
+private struct WidgetDotGrid: Shape {
+    private let spacing: CGFloat = 22
+    private let dotRadius: CGFloat = 1.1
 
-    var body: some View {
-        Canvas { context, size in
-            let spacing: CGFloat = 22
-            let dotSize: CGFloat = 2.2
-            let dotColor = Color.white.opacity(colorScheme == .dark ? 0.11 : 0.07)
-            let cols = Int(size.width  / spacing) + 1
-            let rows = Int(size.height / spacing) + 1
-            var path = Path()
-            for row in 0...rows {
-                for col in 0...cols {
-                    path.addEllipse(in: CGRect(
-                        x: CGFloat(col) * spacing - dotSize / 2,
-                        y: CGFloat(row) * spacing - dotSize / 2,
-                        width: dotSize,
-                        height: dotSize
-                    ))
-                }
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let cols = Int(rect.width  / spacing) + 2
+        let rows = Int(rect.height / spacing) + 2
+        for row in 0..<rows {
+            for col in 0..<cols {
+                let cx = CGFloat(col) * spacing
+                let cy = CGFloat(row) * spacing
+                p.addEllipse(in: CGRect(x: cx - dotRadius, y: cy - dotRadius,
+                                        width: dotRadius * 2, height: dotRadius * 2))
             }
-            context.fill(path, with: .color(dotColor))
         }
+        return p
     }
 }
 
@@ -154,6 +148,7 @@ struct MyAppWidgetEntryView: View {
     var body: some View {
         ZStack {
             WidgetDotGrid()
+                .fill(Color.white.opacity(0.09))
 
             if entry.members.isEmpty {
                 Text("Open app to start")

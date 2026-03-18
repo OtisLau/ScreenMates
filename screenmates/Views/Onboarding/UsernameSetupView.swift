@@ -22,72 +22,72 @@ struct UsernameSetupView: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
+        ZStack {
+            AppBackground()
 
-            VStack(spacing: 28) {
-                // Avatar placeholder
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.accent.opacity(0.15))
-                        .frame(width: 80, height: 80)
+            VStack(spacing: 0) {
+                Spacer()
+
+                VStack(spacing: 28) {
+                    // Icon
                     Image(systemName: "person.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(AppTheme.accent)
-                }
+                        .font(.system(size: 44, weight: .light))
+                        .foregroundStyle(Color.primary.opacity(0.7))
 
-                VStack(spacing: 8) {
-                    Text("What's your name?")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                    VStack(spacing: 8) {
+                        Text("What's your name?")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
 
-                    Text("This is how you'll appear to your friends")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
+                        Text("This is how you'll appear to your friends")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
 
-                // Input field
-                VStack(spacing: 6) {
-                    TextField("", text: $username, prompt: Text("Enter your name").foregroundColor(.secondary))
-                        .font(.system(size: 22, weight: .semibold))
-                        .multilineTextAlignment(.center)
-                        .autocapitalization(.words)
-                        .disableAutocorrection(true)
-                        .focused($isFocused)
-                        .padding(.vertical, 18)
-                        .glassCard(cornerRadius: AppTheme.cornerRadiusLarge)
-                        .padding(.horizontal)
+                    // Input field
+                    VStack(spacing: 6) {
+                        TextField("", text: $username, prompt: Text("Your name").foregroundColor(.secondary))
+                            .font(.system(size: 22, weight: .semibold))
+                            .multilineTextAlignment(.center)
+                            .autocapitalization(.words)
+                            .disableAutocorrection(true)
+                            .focused($isFocused)
+                            .padding(.vertical, 18)
+                            .glassCard(cornerRadius: AppTheme.cornerRadiusLarge)
+                            .padding(.horizontal, 24)
 
-                    Text("\(username.count)/20")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-
-            Spacer()
-
-            // Continue button
-            Button {
-                saveUsername()
-            } label: {
-                HStack {
-                    if isLoading {
-                        ProgressView()
-                    } else {
-                        Text("Continue")
-                            .fontWeight(.semibold)
-                        Image(systemName: "arrow.right")
+                        Text("\(username.count)/20")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+
+                Spacer()
+
+                // Continue button
+                Button {
+                    saveUsername()
+                } label: {
+                    HStack(spacing: 8) {
+                        if isLoading {
+                            ProgressView()
+                        } else {
+                            Text("Continue")
+                                .fontWeight(.semibold)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                }
+                .modifier(UsernameButtonStyle(filled: !username.isEmpty))
+                .padding(.horizontal, 24)
+                .padding(.bottom, 48)
+                .disabled(username.isEmpty || isLoading)
             }
-            .modifier(UsernameButtonStyle(filled: !username.isEmpty))
-            .padding(.horizontal, 24)
-            .padding(.bottom, 48)
-            .disabled(username.isEmpty || isLoading)
         }
         .onAppear { isFocused = true }
         .alert("Invalid Name", isPresented: $showError) {
