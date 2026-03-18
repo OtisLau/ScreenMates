@@ -55,7 +55,10 @@ struct SettingsView: View {
                         Button {
                             UIPasteboard.general.string = cloudManager.myGroupID
                             codeCopied = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { codeCopied = false }
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .seconds(1.8))
+                                codeCopied = false
+                            }
                         } label: {
                             HStack {
                                 Image(systemName: "person.2")

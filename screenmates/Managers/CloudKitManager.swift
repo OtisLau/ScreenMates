@@ -40,13 +40,18 @@ class CloudKitManager: ObservableObject {
     // Shared storage accessible by the ScreenTimeMonitor extension and widget
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
 
+    // Reusable encoder/decoder — avoids repeated allocation on every cache read/write
+    private static let jsonEncoder = JSONEncoder()
+    private static let jsonDecoder = JSONDecoder()
+
     // Throttle widget timeline reloads to avoid OOM-killing the widget process.
     // Use a faster cadence while app is active and a slower one in background.
     private var lastWidgetReload: Date = .distantPast
     private let widgetReloadThrottleForeground: TimeInterval = 30        // 30 seconds
     private let widgetReloadThrottleBackground: TimeInterval = 15 * 60   // 15 minutes
 
-    // The CloudKit record ID for this user — always the same so we never create duplicates
+    // The CloudKit record ID for this user — always the same so we never create duplicates.
+    // Computed lazily from myID; CKRecord.ID is cheap but no need to reallocate on every access.
     private var myUserProfileRecordID: CKRecord.ID {
         CKRecord.ID(recordName: myID)
     }
@@ -136,8 +141,10 @@ class CloudKitManager: ObservableObject {
 
         isLoading = true
 
-        database.save(record) { _, error in
-            DispatchQueue.main.async {
+        database.save(record) { [weak self] _, error in
+            guard let self else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
                 self.isLoading = false
 
                 if let error = error {
@@ -161,8 +168,10 @@ class CloudKitManager: ObservableObject {
         let predicate = NSPredicate(format: "group_id == %@", groupID)
         let query = CKQuery(recordType: "SocialGroup", predicate: predicate)
 
-        database.fetch(withQuery: query, inZoneWith: nil, resultsLimit: 1) { result in
-            DispatchQueue.main.async {
+        database.fetch(withQuery: query, inZoneWith: nil, resultsLimit: 1) { [weak self] result in
+            guard let self else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
                 self.isLoading = false
 
                 switch result {
@@ -294,8 +303,10 @@ class CloudKitManager: ObservableObject {
         let query = CKQuery(recordType: "UserProfile", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "blocks_used", ascending: false)]
 
-        database.fetch(withQuery: query, inZoneWith: nil, resultsLimit: 20) { result in
-            DispatchQueue.main.async {
+        database.fetch(withQuery: query, inZoneWith: nil, resultsLimit: 20) { [weak self] result in
+            guard let self else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
                 self.isLoading = false
 
                 switch result {
@@ -485,7 +496,7 @@ class CloudKitManager: ObservableObject {
     // Save the group member list to App Group storage so the widget can read it
     // without needing to hit CloudKit directly.
     private func cacheLeaderboardData(forceWidgetReload: Bool = false) {
-        if let encoded = try? JSONEncoder().encode(groupMembers) {
+        if let encoded = try? CloudKitManager.jsonEncoder.encode(groupMembers) {
             sharedDefaults?.set(encoded, forKey: AppConstants.Keys.cachedLeaderboardData)
         }
         // Throttle widget reloads dynamically:
@@ -515,7 +526,7 @@ class CloudKitManager: ObservableObject {
     // Load cached group data on launch so the UI shows something instantly
     private func loadCachedData() {
         if let data = sharedDefaults?.data(forKey: AppConstants.Keys.cachedLeaderboardData),
-           let cached = try? JSONDecoder().decode([MemberData].self, from: data) {
+           let cached = try? CloudKitManager.jsonDecoder.decode([MemberData].self, from: data) {
             self.groupMembers = cached
             print(" Loaded \(cached.count) cached members from disk")
         }

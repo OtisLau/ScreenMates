@@ -107,9 +107,7 @@ struct UsernameSetupView: View {
         isLoading = true
         cloudManager.myDisplayName = trimmed
         cloudManager.usernameSet = true
-        cloudManager.updateMyProfile()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        cloudManager.updateMyProfile {
             isLoading = false
         }
     }

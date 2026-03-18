@@ -53,19 +53,83 @@ struct Provider: TimelineProvider {
         if let data = defaults?.data(forKey: WidgetConstants.cachedLeaderboardKey) {
             members = (try? JSONDecoder().decode([CachedMember].self, from: data)) ?? []
         }
-        members.sort { $0.blocks < $1.blocks }
+        members.sort { $0.blocks > $1.blocks }
         return SimpleEntry(date: Date(), members: Array(members.prefix(4)), blockSizeMinutes: blockSize)
     }
 }
 
-// MARK: - Dot grid background (mirrors AppBackground in the main app)
+
+
+// MARK: - Single member row
+private struct WidgetMemberRow: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let rank: Int
+    let member: CachedMember
+    let blockSize: Int
+    let isTop: Bool
+
+    private var hours: Int { member.minutesUsed(blockSize: blockSize) / 60 }
+    private var mins: Int  { member.minutesUsed(blockSize: blockSize) % 60 }
+
+    // Foreground colors that work on both dark and light backgrounds
+    private var primaryColor: Color {
+        colorScheme == .dark ? .white : .black
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // Rank — no leading inset so it sits at the far left
+            Text("\(rank)")
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(primaryColor.opacity(0.3))
+                .frame(width: 18, alignment: .leading)
+
+            // Name — high layout priority so it gets space before the time
+            Text(member.displayName)
+                .font(.system(size: 13, weight: isTop ? .semibold : .regular, design: .rounded))
+                .foregroundStyle(primaryColor.opacity(isTop ? 0.92 : 0.65))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .layoutPriority(1)
+
+            Spacer(minLength: 4)
+
+            // Time — fixed-width column so it never steals space from the name
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
+                if hours > 0 {
+                    Text("\(hours)")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    Text("h")
+                        .font(.system(size: 10, weight: .regular, design: .rounded))
+                        .foregroundStyle(primaryColor.opacity(0.4))
+                        .padding(.trailing, 1)
+                }
+                Text("\(mins)")
+                    .font(.system(size: hours > 0 ? 11 : 13, weight: .semibold, design: .rounded))
+                Text("m")
+                    .font(.system(size: 10, weight: .regular, design: .rounded))
+                    .foregroundStyle(primaryColor.opacity(0.4))
+            }
+            .foregroundStyle(primaryColor.opacity(isTop ? 0.85 : 0.5))
+            .frame(width: 58, alignment: .trailing)
+        }
+        .padding(.vertical, 5)
+    }
+}
+
+// MARK: - Dot grid background (widget-safe)
+// Single Path + one fill call — same technique as the main app but
+// scoped to the small widget canvas (~64 dots max vs ~200+ on a full screen).
 private struct WidgetDotGrid: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         Canvas { context, size in
-            let spacing: CGFloat = 18
-            let dotSize: CGFloat = 1.8
-            let cols = Int(size.width / spacing) + 2
-            let rows = Int(size.height / spacing) + 2
+            let spacing: CGFloat = 22
+            let dotSize: CGFloat = 2.2
+            let dotColor = Color.white.opacity(colorScheme == .dark ? 0.11 : 0.07)
+            let cols = Int(size.width  / spacing) + 1
+            let rows = Int(size.height / spacing) + 1
             var path = Path()
             for row in 0...rows {
                 for col in 0...cols {
@@ -77,89 +141,45 @@ private struct WidgetDotGrid: View {
                     ))
                 }
             }
-            context.fill(path, with: .color(.white.opacity(0.11)))
+            context.fill(path, with: .color(dotColor))
         }
-    }
-}
-
-// MARK: - Single member row (mirrors GroupMemberRow style)
-private struct WidgetMemberRow: View {
-    let rank: Int
-    let member: CachedMember
-    let blockSize: Int
-    let isTop: Bool
-
-    private var hours: Int { member.minutesUsed(blockSize: blockSize) / 60 }
-    private var mins: Int  { member.minutesUsed(blockSize: blockSize) % 60 }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text("\(rank)")
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.3))
-                .frame(width: 14, alignment: .center)
-
-            Text(member.displayName)
-                .font(.system(size: 13, weight: isTop ? .semibold : .regular, design: .rounded))
-                .foregroundStyle(.white.opacity(isTop ? 0.92 : 0.6))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-
-            Spacer(minLength: 2)
-
-            // Matches the h/m superscript style from GroupMemberRow
-            HStack(alignment: .firstTextBaseline, spacing: 1) {
-                if hours > 0 {
-                    Text("\(hours)")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    Text("h")
-                        .font(.system(size: 10, weight: .regular, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.45))
-                        .padding(.trailing, 1)
-                }
-                Text("\(mins)")
-                    .font(.system(size: hours > 0 ? 11 : 13, weight: .semibold, design: .rounded))
-                Text("m")
-                    .font(.system(size: 10, weight: .regular, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.45))
-            }
-            .foregroundStyle(.white.opacity(isTop ? 0.85 : 0.5))
-            .fixedSize()
-        }
-        .padding(.vertical, 5)
     }
 }
 
 // MARK: - Widget entry view
 struct MyAppWidgetEntryView: View {
+    @Environment(\.colorScheme) private var colorScheme
     var entry: Provider.Entry
 
     var body: some View {
-        if entry.members.isEmpty {
-            Text("Open app to start")
-                .font(.system(size: 11, design: .rounded))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
-                    WidgetMemberRow(
-                        rank: index + 1,
-                        member: member,
-                        blockSize: entry.blockSizeMinutes,
-                        isTop: index == 0
-                    )
-                    if index < entry.members.count - 1 {
-                        Rectangle()
-                            .fill(Color.white.opacity(0.07))
-                            .frame(height: 1)
-                            .padding(.horizontal, 2)
+        ZStack {
+            WidgetDotGrid()
+
+            if entry.members.isEmpty {
+                Text("Open app to start")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
+                        WidgetMemberRow(
+                            rank: index + 1,
+                            member: member,
+                            blockSize: entry.blockSizeMinutes,
+                            isTop: index == 0
+                        )
+                        if index < entry.members.count - 1 {
+                            Rectangle()
+                                .fill(Color.primary.opacity(0.06))
+                                .frame(height: 1)
+                        }
                     }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 }
@@ -172,7 +192,6 @@ struct MyAppWidget: Widget {
             MyAppWidgetEntryView(entry: entry)
                 .containerBackground(for: .widget) {
                     Color.black
-                    WidgetDotGrid()
                 }
         }
         .configurationDisplayName("ScreenMates Group")

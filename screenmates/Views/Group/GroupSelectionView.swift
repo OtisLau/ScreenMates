@@ -147,15 +147,14 @@ struct GroupSelectionView: View {
         error = nil
         isWorking = true
         let gid = groupInput.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        // Completion is already dispatched to main by CloudKitManager
         cloudManager.validateGroup(gid) { result in
-            DispatchQueue.main.async {
-                self.isWorking = false
-                switch result {
-                case .success:
-                    self.cloudManager.joinGroup(groupID: gid)
-                case .failure(let appError):
-                    self.error = appError
-                }
+            isWorking = false
+            switch result {
+            case .success:
+                cloudManager.joinGroup(groupID: gid)
+            case .failure(let appError):
+                error = appError
             }
         }
     }
@@ -163,16 +162,15 @@ struct GroupSelectionView: View {
     private func createGroup() {
         error = nil
         isWorking = true
+        // Completion is already dispatched to main by CloudKitManager
         cloudManager.createGroup { result in
-            DispatchQueue.main.async {
-                self.isWorking = false
-                switch result {
-                case .success(let groupID):
-                    self.createdGroupID = groupID
-                    self.showingShareSheet = true
-                case .failure(let appError):
-                    self.error = appError
-                }
+            isWorking = false
+            switch result {
+            case .success(let groupID):
+                createdGroupID = groupID
+                showingShareSheet = true
+            case .failure(let appError):
+                error = appError
             }
         }
     }

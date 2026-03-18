@@ -281,10 +281,8 @@ struct DebugMenuView: View {
                     // Use this when the current event batch is exhausted and the extension goes silent.
                     Button {
                         isRestarting = true
-                        DispatchQueue.global().async {
-                            MonitoringManager.shared.restartMonitoring()
-                            DispatchQueue.main.async { isRestarting = false }
-                        }
+                        MonitoringManager.shared.restartMonitoring()
+                        isRestarting = false
                     } label: {
                         if isRestarting {
                             Label("Restarting…", systemImage: "hourglass")
@@ -308,20 +306,12 @@ struct DebugMenuView: View {
                     Button(role: .destructive) {
                         isResetting = true
                         cloudManager.resetMyCountToZero {
-                            // In test mode, a plain count reset can leave stale high-index
-                            // events registered. Immediately restart so we begin again at block_1.
                             if AppConstants.isTestMode {
-                                DispatchQueue.global().async {
-                                    MonitoringManager.shared.restartMonitoring()
-                                    DispatchQueue.main.async {
-                                        isResetting = false
-                                        refreshMonitoringStatus()
-                                    }
-                                }
-                            } else {
-                                isResetting = false
+                                MonitoringManager.shared.restartMonitoring()
                             }
-                    }
+                            isResetting = false
+                            refreshMonitoringStatus()
+                        }
                 } label: {
                         if isResetting {
                             Label("Resetting…", systemImage: "hourglass")
@@ -349,8 +339,6 @@ struct DebugMenuView: View {
             // Refresh monitoring status every 5 seconds while the debug menu is open
             .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
                 refreshMonitoringStatus()
-                // Also force a UI refresh so "Your local blocks" stays live
-                cloudManager.objectWillChange.send()
             }
         }
     }

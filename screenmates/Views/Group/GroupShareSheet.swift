@@ -44,7 +44,8 @@ struct GroupShareSheet: View {
                     Button {
                         UIPasteboard.general.string = groupID
                         withAnimation(.spring(response: 0.3)) { copied = true }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(2))
                             withAnimation { copied = false }
                         }
                     } label: {

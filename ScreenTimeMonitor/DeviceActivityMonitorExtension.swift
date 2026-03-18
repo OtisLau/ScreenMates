@@ -18,12 +18,12 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     private let recentSetupClampWindow: TimeInterval = 20 * 60
     private let deltaJitterAllowance = 2
 
+    // Single shared defaults instance — avoids re-allocating UserDefaults on every property access.
+    private lazy var sharedDefaults: UserDefaults? = UserDefaults(suiteName: suiteName)
+
     // Hard cap of trackable thresholds in a day derived from block size only.
-    // This intentionally ignores app-side event batch size so "events per restart"
-    // cannot accidentally limit total daily counting.
     private var maxTrackableBlocksPerDay: Int {
-        let defaults = UserDefaults(suiteName: suiteName)
-        let bs = defaults?.integer(forKey: "SharedBlockSizeMinutes") ?? 0
+        let bs = sharedDefaults?.integer(forKey: "SharedBlockSizeMinutes") ?? 0
         let blockSize = bs > 0 ? bs : 15
         let maxThresholdMinuteOfDay = (24 * 60) - 1
         let dailyCap = (maxThresholdMinuteOfDay + blockSize - 1) / blockSize
@@ -31,22 +31,19 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     }
 
     private var blockSizeMinutes: Int {
-        let defaults = UserDefaults(suiteName: suiteName)
-        let bs = defaults?.integer(forKey: "SharedBlockSizeMinutes") ?? 0
+        let bs = sharedDefaults?.integer(forKey: "SharedBlockSizeMinutes") ?? 0
         return bs > 0 ? bs : 15
     }
 
     // The extension can't import AppConstants from the main app, so the main app mirrors
-    // the upload throttle value into App Group storage. We read it here and fall back to
-    // 30 minutes if it hasn't been set yet (i.e. app hasn't been opened once since install).
+    // the upload throttle value into App Group storage.
     private var uploadThrottleSeconds: TimeInterval {
-        UserDefaults(suiteName: suiteName)?.double(forKey: "SharedUploadThrottleSeconds").nonZero ?? (30 * 60)
+        sharedDefaults?.double(forKey: "SharedUploadThrottleSeconds").nonZero ?? (30 * 60)
     }
 
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
 
-        let sharedDefaults = UserDefaults(suiteName: suiteName)
         guard let sharedDefaults else {
             print(" App Group UserDefaults unavailable for suite '\(suiteName)'")
             return
@@ -108,12 +105,10 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
         // 4. Update the current user's entry in the widget cache so the widget shows
         //    fresh data for the local user without waiting for a CloudKit round-trip.
-        //    Then tell the widget to reload — but throttle to max once per 30 seconds
-        //    so rapid threshold events don't hammer the widget process into an OOM kill.
         updateWidgetCache(sharedDefaults: sharedDefaults, currentBlocks: currentBlocks)
 
         // 5. Upload to CloudKit so friends see your updated count
-        attemptCloudUpload(sharedDefaults: sharedDefaults, currentBlocks: currentBlocks)
+        attemptCloudUpload(currentBlocks: currentBlocks)
     }
 
     // Minimal struct that matches the JSON schema of MemberData / CachedMember so the
@@ -164,7 +159,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         }
     }
 
-    private func attemptCloudUpload(sharedDefaults: UserDefaults?, currentBlocks: Int) {
+    private func attemptCloudUpload(currentBlocks: Int) {
         guard let sharedDefaults else { return }
 
         // Throttle uploads

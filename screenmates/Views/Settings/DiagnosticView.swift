@@ -132,9 +132,9 @@ struct DiagnosticView: View {
         diagnosticResult += "\n\n Set display name to 'TestUser'\n"
         diagnosticResult += "Now forcing sync...\n"
         
-        cloudManager.updateMyProfile {
+        cloudManager.updateMyProfile { [self] in
             cloudManager.fetchGroupData(useCache: false)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [self] in
                 runDiagnostics()
             }
         }
@@ -148,14 +148,12 @@ struct DiagnosticView: View {
         print("Display Name: \(cloudManager.myDisplayName)")
         print("Group ID: \(cloudManager.myGroupID)")
         
-        cloudManager.updateMyProfile {
+        cloudManager.updateMyProfile { [self] in
             print(" updateMyProfile completed")
-            
             cloudManager.fetchGroupData(useCache: false)
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                self.diagnosticResult += "Sync completed, refreshing...\n"
-                self.runDiagnostics()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [self] in
+                diagnosticResult += "Sync completed, refreshing...\n"
+                runDiagnostics()
             }
         }
     }
@@ -164,39 +162,37 @@ struct DiagnosticView: View {
         diagnosticResult += "\n\n Checking CloudKit...\n"
         
         // Check iCloud account status
-        cloudManager.container.accountStatus { status, error in
-            DispatchQueue.main.async {
+        cloudManager.container.accountStatus { [self] status, error in
+            DispatchQueue.main.async { [self] in
                 if let error = error {
-                    self.diagnosticResult += " Account check failed: \(error.localizedDescription)\n"
+                    diagnosticResult += " Account check failed: \(error.localizedDescription)\n"
                     return
                 }
-                
+
                 switch status {
                 case .available:
-                    self.diagnosticResult += " iCloud account is available\n"
+                    diagnosticResult += " iCloud account is available\n"
                 case .noAccount:
-                    self.diagnosticResult += " NO iCloud ACCOUNT!\n"
-                    self.diagnosticResult += "   Fix: Settings → Sign in to iCloud\n"
+                    diagnosticResult += " NO iCloud ACCOUNT!\n"
+                    diagnosticResult += "   Fix: Settings → Sign in to iCloud\n"
                 case .restricted:
-                    self.diagnosticResult += " iCloud is RESTRICTED\n"
+                    diagnosticResult += " iCloud is RESTRICTED\n"
                 case .couldNotDetermine:
-                    self.diagnosticResult += " Could not determine iCloud status\n"
+                    diagnosticResult += " Could not determine iCloud status\n"
                 case .temporarilyUnavailable:
-                    self.diagnosticResult += " iCloud temporarily unavailable\n"
+                    diagnosticResult += " iCloud temporarily unavailable\n"
                 @unknown default:
-                    self.diagnosticResult += " Unknown iCloud status\n"
+                    diagnosticResult += " Unknown iCloud status\n"
                 }
-                
-                // Now try to fetch
-                if !self.cloudManager.myGroupID.isEmpty {
-                    self.diagnosticResult += "\nFetching group data...\n"
-                    self.cloudManager.fetchGroupData(useCache: false)
-                    
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                        self.runDiagnostics()
+
+                if !cloudManager.myGroupID.isEmpty {
+                    diagnosticResult += "\nFetching group data...\n"
+                    cloudManager.fetchGroupData(useCache: false)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [self] in
+                        runDiagnostics()
                     }
                 } else {
-                    self.diagnosticResult += " No group ID to check\n"
+                    diagnosticResult += " No group ID to check\n"
                 }
             }
         }
