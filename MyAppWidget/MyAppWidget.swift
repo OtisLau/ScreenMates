@@ -58,8 +58,7 @@ struct Provider: TimelineProvider {
     }
 }
 
-// MARK: - Widget dot grid
-// Uses a single Path with all ellipses batched — one fill call, no per-dot allocations.
+// MARK: - Dot grid background (mirrors AppBackground in the main app)
 private struct WidgetDotGrid: View {
     var body: some View {
         Canvas { context, size in
@@ -78,8 +77,56 @@ private struct WidgetDotGrid: View {
                     ))
                 }
             }
-            context.fill(path, with: .color(.white.opacity(0.1)))
+            context.fill(path, with: .color(.white.opacity(0.11)))
         }
+    }
+}
+
+// MARK: - Single member row (mirrors GroupMemberRow style)
+private struct WidgetMemberRow: View {
+    let rank: Int
+    let member: CachedMember
+    let blockSize: Int
+    let isTop: Bool
+
+    private var hours: Int { member.minutesUsed(blockSize: blockSize) / 60 }
+    private var mins: Int  { member.minutesUsed(blockSize: blockSize) % 60 }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("\(rank)")
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.3))
+                .frame(width: 14, alignment: .center)
+
+            Text(member.displayName)
+                .font(.system(size: 13, weight: isTop ? .semibold : .regular, design: .rounded))
+                .foregroundStyle(.white.opacity(isTop ? 0.92 : 0.6))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Spacer(minLength: 2)
+
+            // Matches the h/m superscript style from GroupMemberRow
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
+                if hours > 0 {
+                    Text("\(hours)")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    Text("h")
+                        .font(.system(size: 10, weight: .regular, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .padding(.trailing, 1)
+                }
+                Text("\(mins)")
+                    .font(.system(size: hours > 0 ? 11 : 13, weight: .semibold, design: .rounded))
+                Text("m")
+                    .font(.system(size: 10, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .foregroundStyle(.white.opacity(isTop ? 0.85 : 0.5))
+            .fixedSize()
+        }
+        .padding(.vertical, 5)
     }
 }
 
@@ -88,40 +135,31 @@ struct MyAppWidgetEntryView: View {
     var entry: Provider.Entry
 
     var body: some View {
-        ZStack {
-            Color(red: 0.07, green: 0.07, blue: 0.12)
-            WidgetDotGrid()
-
-            if entry.members.isEmpty {
-                Text("Open app to start")
-                    .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.35))
-            } else {
-                VStack(alignment: .leading, spacing: 7) {
-                    ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
-                        HStack(spacing: 8) {
-                            Text("\(index + 1)")
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundStyle(.white.opacity(0.25))
-                                .frame(width: 12, alignment: .center)
-                            Text(member.displayName)
-                                .font(.system(size: 13, weight: index == 0 ? .semibold : .regular, design: .rounded))
-                                .foregroundStyle(.white.opacity(index == 0 ? 0.92 : 0.55))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            Spacer(minLength: 4)
-                            Text(member.formattedTime(blockSize: entry.blockSizeMinutes))
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(.white.opacity(index == 0 ? 0.7 : 0.4))
-                                .lineLimit(1)
-                                .fixedSize()
-                        }
+        if entry.members.isEmpty {
+            Text("Open app to start")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
+                    WidgetMemberRow(
+                        rank: index + 1,
+                        member: member,
+                        blockSize: entry.blockSizeMinutes,
+                        isTop: index == 0
+                    )
+                    if index < entry.members.count - 1 {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.07))
+                            .frame(height: 1)
+                            .padding(.horizontal, 2)
                     }
-                    Spacer(minLength: 0)
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 }
@@ -132,7 +170,10 @@ struct MyAppWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             MyAppWidgetEntryView(entry: entry)
-                .containerBackground(.clear, for: .widget)
+                .containerBackground(for: .widget) {
+                    Color.black
+                    WidgetDotGrid()
+                }
         }
         .configurationDisplayName("ScreenMates Group")
         .description("Your group's screen time.")
