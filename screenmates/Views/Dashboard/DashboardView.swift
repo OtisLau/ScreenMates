@@ -43,27 +43,15 @@ struct DashboardView: View {
 
                         // Group section
                         VStack(spacing: 0) {
-                            // Group header row
-                            HStack {
-                                Text("GROUP")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                    .kerning(1.5)
-
-                                Spacer()
-
-                                Button {
-                                    UIPasteboard.general.string = cloudManager.myGroupID
-                                } label: {
-                                    Text(cloudManager.myGroupID)
-                                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                        .kerning(1.5)
-                                }
-                                .glassButtonStyle()
-                            }
-                            .padding(.horizontal, 24)
-                            .padding(.top, 24)
-                            .padding(.bottom, 12)
+                            // Group header
+                            Text("GROUP")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .kerning(1.5)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 24)
+                                .padding(.top, 24)
+                                .padding(.bottom, 12)
 
                             // Member rows inside one contained glass card
                             if cloudManager.isLoading && cloudManager.groupMembers.isEmpty {

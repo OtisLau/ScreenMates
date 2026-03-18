@@ -6,12 +6,23 @@ struct SettingsView: View {
     @State private var showingDebugMenu = false
     @State private var showingLeaveConfirm = false
 
-    // Preset goal options in minutes
-    private let goalOptions = [30, 60, 90, 120, 150, 180, 240, 300, 360]
+    @State private var limitHours: Int = 0
+    @State private var limitMinutes: Int = 0
 
-    private func goalLabel(_ minutes: Int) -> String {
-        let h = minutes / 60
-        let m = minutes % 60
+    private func loadLimit() {
+        limitHours   = cloudManager.dailyGoalMinutes / 60
+        limitMinutes = (cloudManager.dailyGoalMinutes % 60 / 5) * 5
+    }
+
+    private func saveLimit() {
+        cloudManager.dailyGoalMinutes = limitHours * 60 + limitMinutes
+    }
+
+    private var limitSummary: String {
+        let total = limitHours * 60 + limitMinutes
+        if total == 0 { return "no limit" }
+        let h = total / 60
+        let m = total % 60
         if h > 0 && m > 0 { return "\(h)h \(m)m" }
         else if h > 0      { return "\(h)h" }
         else               { return "\(m)m" }
@@ -23,48 +34,52 @@ struct SettingsView: View {
                 // Identity
                 Section("Identity") {
                     settingsRow(
-                        icon: "person.fill",
-                        iconColor: AppTheme.accent,
+                        icon: "person",
                         label: "Display Name",
                         value: cloudManager.myDisplayName.isEmpty ? "Not set" : cloudManager.myDisplayName
                     )
                     settingsRow(
                         icon: "number",
-                        iconColor: Color.secondary,
                         label: "User ID",
-                        value: String(cloudManager.myID.prefix(12)) + "..."
+                        value: cloudManager.myID
                     )
                 }
 
                 // Group
                 Section("Group") {
                     if cloudManager.myGroupID.isEmpty {
-                        settingsRow(
-                            icon: "person.2.fill",
-                            iconColor: Color.secondary,
-                            label: "Group",
-                            value: "Not in a group"
-                        )
+                        settingsRow(icon: "person.2", label: "Group", value: "Not in a group")
                     } else {
-                        settingsRow(
-                            icon: "person.2.fill",
-                            iconColor: Color(UIColor.systemGreen),
-                            label: "Group Code",
-                            value: cloudManager.myGroupID
-                        )
+                        // Tap to copy
+                        Button {
+                            UIPasteboard.general.string = cloudManager.myGroupID
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.2")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 20)
+                                Text("Group Code")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text(cloudManager.myGroupID)
+                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .buttonStyle(.plain)
 
                         Button(role: .destructive) {
                             showingLeaveConfirm = true
                         } label: {
                             HStack(spacing: 12) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color.red.opacity(0.15))
-                                        .frame(width: 28, height: 28)
-                                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(.red)
-                                }
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.red)
+                                    .frame(width: 20)
                                 Text("Leave Group")
                                     .foregroundStyle(.red)
                             }
@@ -72,71 +87,50 @@ struct SettingsView: View {
                     }
                 }
 
-                // Goal
+                // Limit
                 Section {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color(UIColor.systemGreen).opacity(0.15))
-                                    .frame(width: 28, height: 28)
-                                Image(systemName: "target")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Color(UIColor.systemGreen))
-                            }
-                            Text("Daily Goal")
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Text("Daily Limit")
                             Spacer()
-                            Text(cloudManager.dailyGoalMinutes == 0 ? "No goal" : goalLabel(cloudManager.dailyGoalMinutes))
-                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(cloudManager.dailyGoalMinutes == 0 ? Color.secondary : AppTheme.accent)
+                            Text(limitSummary)
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundStyle(limitHours == 0 && limitMinutes == 0 ? Color.secondary : Color.primary)
                         }
 
-                        // Scrollable row of preset chips
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                // "No goal" chip
-                                let noGoalSelected = cloudManager.dailyGoalMinutes == 0
-                                Button {
-                                    cloudManager.dailyGoalMinutes = 0
-                                } label: {
-                                    Text("None")
-                                        .font(.system(size: 13, weight: noGoalSelected ? .bold : .regular))
-                                        .foregroundStyle(noGoalSelected ? Color.primary : Color.secondary)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(noGoalSelected ? Color(UIColor.secondarySystemFill) : Color.clear)
-                                        .clipShape(Capsule())
-                                        .overlay(Capsule().stroke(noGoalSelected ? Color(UIColor.separator) : Color(UIColor.separator).opacity(0.5), lineWidth: 1))
-                                }
-                                .buttonStyle(.plain)
+                        Divider()
 
-                                ForEach(goalOptions, id: \.self) { minutes in
-                                    let selected = cloudManager.dailyGoalMinutes == minutes
-                                    Button {
-                                        cloudManager.dailyGoalMinutes = minutes
-                                    } label: {
-                                        Text(goalLabel(minutes))
-                                            .font(.system(size: 13, weight: selected ? .bold : .regular, design: .monospaced))
-                                            .foregroundStyle(selected ? Color.primary : Color.secondary)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 6)
-                                            .background(selected ? Color(UIColor.secondarySystemFill) : Color.clear)
-                                            .clipShape(Capsule())
-                                            .overlay(Capsule().stroke(selected ? Color(UIColor.separator) : Color(UIColor.separator).opacity(0.5), lineWidth: 1))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.vertical, 2)
+                        HStack {
+                            Text("Hours")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Stepper("\(limitHours)h", value: $limitHours, in: 0...12)
+                                .labelsHidden()
+                                .onChange(of: limitHours) { _, _ in saveLimit() }
+                            Text("\(limitHours)h")
+                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                .frame(minWidth: 36, alignment: .trailing)
                         }
 
-                        Text("How much screen time you're aiming for per day")
+                        HStack {
+                            Text("Minutes")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Stepper("\(limitMinutes)m", value: $limitMinutes, in: 0...55, step: 5)
+                                .labelsHidden()
+                                .onChange(of: limitMinutes) { _, _ in saveLimit() }
+                            Text("\(limitMinutes)m")
+                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                .frame(minWidth: 36, alignment: .trailing)
+                        }
+
+                        Text("Screen time remaining each day before the ring empties")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
                     }
                     .padding(.vertical, 4)
                 } header: {
-                    Text("Goal")
+                    Text("Limit")
                 }
 
                 // Tools
@@ -144,20 +138,20 @@ struct SettingsView: View {
                     Button {
                         cloudManager.forceSyncNow()
                     } label: {
-                        actionRow(icon: "arrow.triangle.2.circlepath", iconColor: Color(UIColor.systemGreen), label: "Force Sync")
+                        actionRow(icon: "arrow.triangle.2.circlepath", label: "Force Sync")
                     }
                     .buttonStyle(.plain)
 
                     NavigationLink {
                         DiagnosticView()
                     } label: {
-                        actionRow(icon: "stethoscope", iconColor: .orange, label: "Diagnostics")
+                        actionRow(icon: "stethoscope", label: "Diagnostics")
                     }
 
                     Button {
                         showingDebugMenu = true
                     } label: {
-                        actionRow(icon: "wrench.and.screwdriver.fill", iconColor: Color.secondary, label: "Debug Menu")
+                        actionRow(icon: "wrench.and.screwdriver", label: "Debug Menu")
                     }
                     .buttonStyle(.plain)
                 }
@@ -165,6 +159,7 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { loadLimit() }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
@@ -180,16 +175,12 @@ struct SettingsView: View {
         }
     }
 
-    private func settingsRow(icon: String, iconColor: Color, label: String, value: String) -> some View {
+    private func settingsRow(icon: String, label: String, value: String) -> some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(iconColor.opacity(0.15))
-                    .frame(width: 28, height: 28)
-                Image(systemName: icon)
-                    .font(.system(size: 13))
-                    .foregroundStyle(iconColor)
-            }
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
             Text(label)
             Spacer()
             Text(value)
@@ -199,16 +190,12 @@ struct SettingsView: View {
         }
     }
 
-    private func actionRow(icon: String, iconColor: Color, label: String) -> some View {
+    private func actionRow(icon: String, label: String) -> some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(iconColor.opacity(0.15))
-                    .frame(width: 28, height: 28)
-                Image(systemName: icon)
-                    .font(.system(size: 13))
-                    .foregroundStyle(iconColor)
-            }
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
             Text(label)
         }
     }
