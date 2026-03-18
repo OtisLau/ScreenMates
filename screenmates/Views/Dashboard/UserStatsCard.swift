@@ -27,13 +27,12 @@ struct UserStatsCard: View {
         else               { return "\(m)m limit" }
     }
 
-    // Ring color: neutral when no limit, fades to muted red only when over
+    // Ring color: white when healthy, orange-yellow when low, red when critical/over
     private var ringColor: Color {
         if !hasLimit { return Color.primary.opacity(0.2) }
-        if isOverLimit { return Color(UIColor.systemRed).opacity(0.7) }
-        // Smoothly desaturate as the ring drains
-        if remaining < 0.25 { return Color(UIColor.systemOrange).opacity(0.8) }
-        return AppTheme.accent.opacity(0.85)
+        if isOverLimit || remaining < 0.10 { return Color(UIColor.systemRed).opacity(0.85) }
+        if remaining < 0.25 { return Color(red: 1.0, green: 0.75, blue: 0.2).opacity(0.9) }
+        return Color.white.opacity(0.88)
     }
 
     var body: some View {
