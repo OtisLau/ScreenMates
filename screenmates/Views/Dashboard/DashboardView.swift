@@ -43,8 +43,8 @@ struct DashboardView: View {
 
                         // Group section
                         VStack(spacing: 0) {
-                            // Group header
-                            Text("GROUP")
+                            // Leaderboard header
+                            Text("LEADERBOARD")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .kerning(1.5)

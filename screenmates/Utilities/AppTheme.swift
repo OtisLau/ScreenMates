@@ -26,37 +26,43 @@ enum AppTheme {
     static let cornerRadiusLarge: CGFloat = 16
 }
 
-// MARK: - Dot Grid Background
-// Draws a subtle dot grid — like the Atoms app inspiration.
-// Dots are tiny filled circles on a regular grid; opacity keeps them whisper-quiet.
-struct DotGridBackground: View {
-    var spacing: CGFloat = 22
-    var dotSize: CGFloat = 2.5
-    var color: Color = Color.primary.opacity(0.08)
+// MARK: - App Background
+// A layered background: base color + two soft radial blobs + dot grid on top.
+// The blobs give depth without being loud — visible in both light and dark mode.
+struct AppBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        GeometryReader { geo in
+        ZStack {
+            Color(UIColor.systemBackground)
+
+            // Dot grid — single Path, one fill call
             Canvas { context, size in
+                let spacing: CGFloat = 22
+                let dotSize: CGFloat = 2.2
+                let dotColor = Color.primary.opacity(colorScheme == .dark ? 0.11 : 0.07)
                 let cols = Int(size.width / spacing) + 2
                 let rows = Int(size.height / spacing) + 2
+                var path = Path()
                 for row in 0...rows {
                     for col in 0...cols {
-                        let x = CGFloat(col) * spacing
-                        let y = CGFloat(row) * spacing
-                        let rect = CGRect(
-                            x: x - dotSize / 2,
-                            y: y - dotSize / 2,
+                        path.addEllipse(in: CGRect(
+                            x: CGFloat(col) * spacing - dotSize / 2,
+                            y: CGFloat(row) * spacing - dotSize / 2,
                             width: dotSize,
                             height: dotSize
-                        )
-                        context.fill(Circle().path(in: rect), with: .color(color))
+                        ))
                     }
                 }
+                context.fill(path, with: .color(dotColor))
             }
         }
         .ignoresSafeArea()
     }
 }
+
+// Keep old name as alias so existing call sites still work
+typealias DotGridBackground = AppBackground
 
 // MARK: - Glass card modifier
 // Applies the system Liquid Glass effect with a rounded rect shape.

@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingDebugMenu = false
     @State private var showingLeaveConfirm = false
+    @State private var codeCopied = false
 
     @State private var limitHours: Int = 0
     @State private var limitMinutes: Int = 0
@@ -50,9 +51,11 @@ struct SettingsView: View {
                     if cloudManager.myGroupID.isEmpty {
                         settingsRow(icon: "person.2", label: "Group", value: "Not in a group")
                     } else {
-                        // Tap to copy
+                        // Tap to copy — shows checkmark feedback
                         Button {
                             UIPasteboard.general.string = cloudManager.myGroupID
+                            codeCopied = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { codeCopied = false }
                         } label: {
                             HStack {
                                 Image(systemName: "person.2")
@@ -65,13 +68,15 @@ struct SettingsView: View {
                                 Text(cloudManager.myGroupID)
                                     .font(.system(size: 13, weight: .medium, design: .monospaced))
                                     .foregroundStyle(.secondary)
-                                Image(systemName: "doc.on.doc")
+                                Image(systemName: codeCopied ? "checkmark" : "doc.on.doc")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(codeCopied ? Color(UIColor.systemGreen) : Color(UIColor.tertiaryLabel))
+                                    .animation(.easeInOut(duration: 0.2), value: codeCopied)
                             }
                         }
                         .buttonStyle(.plain)
 
+                        // Leave Group — confirmationDialog anchored to this button
                         Button(role: .destructive) {
                             showingLeaveConfirm = true
                         } label: {
@@ -83,6 +88,12 @@ struct SettingsView: View {
                                 Text("Leave Group")
                                     .foregroundStyle(.red)
                             }
+                        }
+                        .confirmationDialog("Leave group?", isPresented: $showingLeaveConfirm, titleVisibility: .visible) {
+                            Button("Leave Group", role: .destructive) { cloudManager.leaveGroup() }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("You'll need a new code to rejoin.")
                         }
                     }
                 }
@@ -164,10 +175,6 @@ struct SettingsView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
-            }
-            .confirmationDialog("Leave group?", isPresented: $showingLeaveConfirm) {
-                Button("Leave Group", role: .destructive) { cloudManager.leaveGroup() }
-                Button("Cancel", role: .cancel) {}
             }
             .sheet(isPresented: $showingDebugMenu) {
                 DebugMenuView()

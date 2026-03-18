@@ -1,24 +1,5 @@
 import WidgetKit
 import SwiftUI
-import Foundation
-
-private extension Color {
-    init(hex: UInt32) {
-        let r = Double((hex >> 16) & 0xFF) / 255
-        let g = Double((hex >> 8)  & 0xFF) / 255
-        let b = Double( hex        & 0xFF) / 255
-        self.init(red: r, green: g, blue: b)
-    }
-}
-
-private enum W {
-    static let background  = Color(hex: 0x0D1117)
-    static let surface     = Color(hex: 0x161B22)
-    static let text        = Color(hex: 0xE6EDF3)
-    static let secondary   = Color(hex: 0x7D8590)
-    static let muted       = Color(hex: 0x484F58)
-    static let accent      = Color(hex: 0x9E6BE8)
-}
 
 private enum WidgetConstants {
     static let kind = "ScreenMatesGroupWidget"
@@ -34,14 +15,22 @@ struct CachedMember: Codable, Identifiable {
     let blocks: Int
     let lastUpdate: Date
 
+    func minutesUsed(blockSize: Int) -> Int { blocks * blockSize }
+
     func formattedTime(blockSize: Int) -> String {
-        let total = blocks * blockSize
+        let total = minutesUsed(blockSize: blockSize)
         let h = total / 60
         let m = total % 60
         if h > 0 && m > 0 { return "\(h)h \(m)m" }
         else if h > 0      { return "\(h)h" }
         else               { return "\(m)m" }
     }
+}
+
+struct SimpleEntry: TimelineEntry {
+    let date: Date
+    let members: [CachedMember]
+    let blockSizeMinutes: Int
 }
 
 struct Provider: TimelineProvider {
@@ -64,43 +53,75 @@ struct Provider: TimelineProvider {
         if let data = defaults?.data(forKey: WidgetConstants.cachedLeaderboardKey) {
             members = (try? JSONDecoder().decode([CachedMember].self, from: data)) ?? []
         }
-        // Sort fewest blocks first (winning = less screen time)
         members.sort { $0.blocks < $1.blocks }
-        return SimpleEntry(date: Date(), members: Array(members.prefix(5)), blockSizeMinutes: blockSize)
+        return SimpleEntry(date: Date(), members: Array(members.prefix(4)), blockSizeMinutes: blockSize)
     }
 }
 
-struct SimpleEntry: TimelineEntry {
-    let date: Date
-    let members: [CachedMember]
-    let blockSizeMinutes: Int
+// MARK: - Widget dot grid
+// Uses a single Path with all ellipses batched — one fill call, no per-dot allocations.
+private struct WidgetDotGrid: View {
+    var body: some View {
+        Canvas { context, size in
+            let spacing: CGFloat = 18
+            let dotSize: CGFloat = 1.8
+            let cols = Int(size.width / spacing) + 2
+            let rows = Int(size.height / spacing) + 2
+            var path = Path()
+            for row in 0...rows {
+                for col in 0...cols {
+                    path.addEllipse(in: CGRect(
+                        x: CGFloat(col) * spacing - dotSize / 2,
+                        y: CGFloat(row) * spacing - dotSize / 2,
+                        width: dotSize,
+                        height: dotSize
+                    ))
+                }
+            }
+            context.fill(path, with: .color(.white.opacity(0.1)))
+        }
+    }
 }
 
+// MARK: - Widget entry view
 struct MyAppWidgetEntryView: View {
     var entry: Provider.Entry
 
     var body: some View {
-        if entry.members.isEmpty {
-            Text("Open app to start")
-                .font(.system(size: 12))
-                .foregroundColor(W.secondary)
-        } else {
-            VStack(alignment: .leading, spacing: 5) {
-                ForEach(entry.members) { member in
-                    HStack {
-                        Text(member.displayName)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(W.text)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(member.formattedTime(blockSize: entry.blockSizeMinutes))
-                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            .foregroundColor(W.secondary)
+        ZStack {
+            Color(red: 0.07, green: 0.07, blue: 0.12)
+            WidgetDotGrid()
+
+            if entry.members.isEmpty {
+                Text("Open app to start")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.35))
+            } else {
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
+                        HStack(spacing: 8) {
+                            Text("\(index + 1)")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.25))
+                                .frame(width: 12, alignment: .center)
+                            Text(member.displayName)
+                                .font(.system(size: 13, weight: index == 0 ? .semibold : .regular, design: .rounded))
+                                .foregroundStyle(.white.opacity(index == 0 ? 0.92 : 0.55))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer(minLength: 4)
+                            Text(member.formattedTime(blockSize: entry.blockSizeMinutes))
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(.white.opacity(index == 0 ? 0.7 : 0.4))
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
                     }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .padding(14)
         }
     }
 }
@@ -111,7 +132,7 @@ struct MyAppWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             MyAppWidgetEntryView(entry: entry)
-                .containerBackground(W.background, for: .widget)
+                .containerBackground(.clear, for: .widget)
         }
         .configurationDisplayName("ScreenMates Group")
         .description("Your group's screen time.")
