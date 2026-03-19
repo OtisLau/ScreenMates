@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @StateObject private var cloudManager = CloudKitManager.shared
+    @ObservedObject private var cloudManager = CloudKitManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showingDebugMenu = false
     @State private var showingLeaveConfirm = false
@@ -138,36 +138,28 @@ struct SettingsView: View {
                                 .frame(minWidth: 36, alignment: .trailing)
                         }
 
-                        Text("Screen time remaining each day before the ring empties")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
                     }
                     .padding(.vertical, 4)
                 } header: {
                     Text("Limit")
                 }
 
-                // Tools
-                Section("Tools") {
-                    Button {
-                        cloudManager.forceSyncNow()
-                    } label: {
-                        actionRow(icon: "arrow.triangle.2.circlepath", label: "Force Sync")
-                    }
-                    .buttonStyle(.plain)
+                // Tools (dev only)
+                if AppConstants.isTestMode {
+                    Section("Tools") {
+                        NavigationLink {
+                            DiagnosticView()
+                        } label: {
+                            actionRow(icon: "stethoscope", label: "Diagnostics")
+                        }
 
-                    NavigationLink {
-                        DiagnosticView()
-                    } label: {
-                        actionRow(icon: "stethoscope", label: "Diagnostics")
+                        Button {
+                            showingDebugMenu = true
+                        } label: {
+                            actionRow(icon: "wrench.and.screwdriver", label: "Debug Menu")
+                        }
+                        .buttonStyle(.plain)
                     }
-
-                    Button {
-                        showingDebugMenu = true
-                    } label: {
-                        actionRow(icon: "wrench.and.screwdriver", label: "Debug Menu")
-                    }
-                    .buttonStyle(.plain)
                 }
             }
             .listStyle(.insetGrouped)

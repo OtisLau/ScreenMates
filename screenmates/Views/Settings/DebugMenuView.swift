@@ -1,7 +1,7 @@
 import SwiftUI
+import Combine
 import DeviceActivity
 import FamilyControls
-import Combine
 
 // Simple debug screen for testing — just shows the two things you care about:
 //  1. Is everyone connected to the same group?
@@ -58,7 +58,7 @@ struct DebugMenuView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
 
                 // WHO'S IN THE GROUP
@@ -261,7 +261,7 @@ struct DebugMenuView: View {
                     HStack {
                         Text("Last threshold index")
                         Spacer()
-                        let idx = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
+                        let idx = sharedDefaults?.integer(forKey: AppConstants.Keys.lastThresholdIndex) ?? 0
                         let blocks = cloudManager.currentBlocksUsed
                         let isStuck = idx > 50 && blocks == 0  // high index, 0 blocks = bad state
                         Text("\(idx)")

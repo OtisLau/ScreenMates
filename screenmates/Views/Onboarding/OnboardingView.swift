@@ -176,10 +176,19 @@ struct OnboardingView: View {
             let minutes = min(i * blockSize, maxMinutesInDay)
             let event: DeviceActivityEvent
             if #available(iOS 17.4, *) {
-                event = DeviceActivityEvent(
-                    threshold: DateComponents(minute: minutes),
-                    includesPastActivity: AppConstants.includesPastActivity
-                )
+                if AppConstants.monitorAllActivity {
+                    event = DeviceActivityEvent(
+                        threshold: DateComponents(minute: minutes),
+                        includesPastActivity: AppConstants.includesPastActivity
+                    )
+                } else {
+                    // Selection-based monitoring — saved selection may be nil on first launch,
+                    // which is fine: the all-activity fallback above handles that case.
+                    event = DeviceActivityEvent(
+                        threshold: DateComponents(minute: minutes),
+                        includesPastActivity: AppConstants.includesPastActivity
+                    )
+                }
             } else {
                 event = DeviceActivityEvent(threshold: DateComponents(minute: minutes))
             }
@@ -190,7 +199,7 @@ struct OnboardingView: View {
             deviceActivityCenter.stopMonitoring()
             let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
             sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
-            sharedDefaults?.set(0, forKey: "LastThresholdIndex")
+            sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
             sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
             sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")
             sharedDefaults?.removeObject(forKey: "LastExtensionCloudUploadAttempt")

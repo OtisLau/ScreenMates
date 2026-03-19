@@ -62,7 +62,6 @@ struct Provider: TimelineProvider {
 
 // MARK: - Single member row
 private struct WidgetMemberRow: View {
-    @Environment(\.colorScheme) private var colorScheme
     let rank: Int
     let member: CachedMember
     let blockSize: Int
@@ -71,109 +70,110 @@ private struct WidgetMemberRow: View {
     private var hours: Int { member.minutesUsed(blockSize: blockSize) / 60 }
     private var mins: Int  { member.minutesUsed(blockSize: blockSize) % 60 }
 
-    // Foreground colors that work on both dark and light backgrounds
-    private var primaryColor: Color {
-        colorScheme == .dark ? .white : .black
-    }
-
     var body: some View {
-        HStack(spacing: 0) {
-            // Rank — no leading inset so it sits at the far left
+        HStack(spacing: 8) {
+            // Rank
             Text("\(rank)")
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(primaryColor.opacity(0.3))
-                .frame(width: 18, alignment: .leading)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(.tertiary)
+                .frame(width: 16, alignment: .center)
 
-            // Name — high layout priority so it gets space before the time
+            // Name
             Text(member.displayName)
-                .font(.system(size: 13, weight: isTop ? .semibold : .regular, design: .rounded))
-                .foregroundStyle(primaryColor.opacity(isTop ? 0.92 : 0.65))
+                .font(.system(size: isTop ? 17 : 15, weight: isTop ? .semibold : .regular))
+                .foregroundStyle(isTop ? Color.primary : Color.primary.opacity(0.7))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .layoutPriority(1)
 
             Spacer(minLength: 4)
 
-            // Time — fixed-width column so it never steals space from the name
-            HStack(alignment: .firstTextBaseline, spacing: 1) {
+            // Time
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
                 if hours > 0 {
                     Text("\(hours)")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.system(size: isTop ? 17 : 15, weight: .semibold, design: .rounded))
                     Text("h")
-                        .font(.system(size: 10, weight: .regular, design: .rounded))
-                        .foregroundStyle(primaryColor.opacity(0.4))
-                        .padding(.trailing, 1)
+                        .font(.system(size: isTop ? 12 : 11, weight: .regular, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 2)
                 }
                 Text("\(mins)")
-                    .font(.system(size: hours > 0 ? 11 : 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: isTop ? 17 : 15, weight: .semibold, design: .rounded))
                 Text("m")
-                    .font(.system(size: 10, weight: .regular, design: .rounded))
-                    .foregroundStyle(primaryColor.opacity(0.4))
+                    .font(.system(size: isTop ? 12 : 11, weight: .regular, design: .rounded))
+                    .foregroundStyle(.secondary)
             }
-            .foregroundStyle(primaryColor.opacity(isTop ? 0.85 : 0.5))
-            .frame(width: 58, alignment: .trailing)
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.vertical, 5)
     }
 }
 
-// MARK: - Dot grid background (widget-safe, no Canvas)
-// Uses a Path drawn via SwiftUI's Shape protocol instead of Canvas.
-// Shape rendering is cheaper in widget extensions than Canvas.
-private struct WidgetDotGrid: Shape {
-    private let spacing: CGFloat = 22
-    private let dotRadius: CGFloat = 1.1
+// MARK: - Dot grid background (matches AppBackground in main app)
+private struct WidgetDotGrid: View {
+    @Environment(\.colorScheme) private var colorScheme
 
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let cols = Int(rect.width  / spacing) + 2
-        let rows = Int(rect.height / spacing) + 2
-        for row in 0..<rows {
-            for col in 0..<cols {
-                let cx = CGFloat(col) * spacing
-                let cy = CGFloat(row) * spacing
-                p.addEllipse(in: CGRect(x: cx - dotRadius, y: cy - dotRadius,
-                                        width: dotRadius * 2, height: dotRadius * 2))
+    var body: some View {
+        Canvas { ctx, size in
+            let spacing: CGFloat = 22
+            let dotSize: CGFloat = 2.2
+            let dotColor = Color.primary.opacity(colorScheme == .dark ? 0.11 : 0.07)
+            let cols = Int(size.width / spacing) + 2
+            let rows = Int(size.height / spacing) + 2
+            var path = Path()
+            for row in 0...rows {
+                for col in 0...cols {
+                    path.addEllipse(in: CGRect(
+                        x: CGFloat(col) * spacing - dotSize / 2,
+                        y: CGFloat(row) * spacing - dotSize / 2,
+                        width: dotSize,
+                        height: dotSize
+                    ))
+                }
             }
+            ctx.fill(path, with: .color(dotColor))
         }
-        return p
     }
 }
 
 // MARK: - Widget entry view
 struct MyAppWidgetEntryView: View {
-    @Environment(\.colorScheme) private var colorScheme
     var entry: Provider.Entry
 
     var body: some View {
-        ZStack {
-            WidgetDotGrid()
-                .fill(Color.white.opacity(0.09))
+        GeometryReader { geo in
+            ZStack {
+                WidgetDotGrid()
+                    .frame(width: geo.size.width, height: geo.size.height)
 
-            if entry.members.isEmpty {
-                Text("Open app to start")
-                    .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
-                        WidgetMemberRow(
-                            rank: index + 1,
-                            member: member,
-                            blockSize: entry.blockSizeMinutes,
-                            isTop: index == 0
-                        )
-                        if index < entry.members.count - 1 {
-                            Rectangle()
-                                .fill(Color.primary.opacity(0.06))
-                                .frame(height: 1)
+                if entry.members.isEmpty {
+                    Text("Open app to start")
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
+                            WidgetMemberRow(
+                                rank: index + 1,
+                                member: member,
+                                blockSize: entry.blockSizeMinutes,
+                                isTop: index == 0
+                            )
+                            .padding(.vertical, 10)
+                            if index < entry.members.count - 1 {
+                                Rectangle()
+                                    .fill(Color.primary.opacity(0.07))
+                                    .frame(height: 1)
+                            }
                         }
+                        Spacer(minLength: 0)
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+                    .frame(width: geo.size.width, height: geo.size.height)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
     }
@@ -186,11 +186,12 @@ struct MyAppWidget: Widget {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             MyAppWidgetEntryView(entry: entry)
                 .containerBackground(for: .widget) {
-                    Color.black
+                    Color(UIColor.systemBackground)
                 }
         }
         .configurationDisplayName("ScreenMates Group")
         .description("Your group's screen time.")
         .supportedFamilies([.systemSmall])
+        .contentMarginsDisabled()
     }
 }

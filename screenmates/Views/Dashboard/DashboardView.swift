@@ -13,7 +13,7 @@ struct DashboardView: View {
     }
 
     private var sortedMembers: [MemberData] {
-        cloudManager.groupMembers.sorted { $0.blocks < $1.blocks }
+        cloudManager.groupMembers.sorted { $0.blocks > $1.blocks }
     }
 
     var body: some View {

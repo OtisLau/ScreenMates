@@ -162,11 +162,11 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     private func attemptCloudUpload(currentBlocks: Int) {
         guard let sharedDefaults else { return }
 
-        // Throttle uploads
+        // Throttle uploads — gate on last *successful* upload so a failed attempt
+        // doesn't block the next threshold from retrying.
         let now = Date()
         let last = sharedDefaults.object(forKey: "LastExtensionCloudUpload") as? Date ?? .distantPast
         guard now.timeIntervalSince(last) >= uploadThrottleSeconds else { return }
-        sharedDefaults.set(now, forKey: "LastExtensionCloudUpload")
         sharedDefaults.set(now, forKey: "LastExtensionCloudUploadAttempt")
 
         // Identity is mirrored into App Group by the main app on launch / setup
@@ -212,6 +212,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
                     latest["last_active_date"] = Date()
                     _ = try await database.save(latest)
                 }
+                sharedDefaults.set(now, forKey: "LastExtensionCloudUpload")
                 sharedDefaults.set(true, forKey: "LastExtensionCloudUploadSuccess")
                 sharedDefaults.removeObject(forKey: "LastExtensionCloudUploadError")
                 print(" Extension: uploaded \(currentBlocks) blocks to CloudKit")

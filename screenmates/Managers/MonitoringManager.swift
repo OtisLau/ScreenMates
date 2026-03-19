@@ -22,7 +22,7 @@ class MonitoringManager {
         guard !Calendar.current.isDate(lastBlockDate, inSameDayAs: now) else { return false }
 
         sharedDefaults.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
-        sharedDefaults.set(0, forKey: "LastThresholdIndex")
+        sharedDefaults.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
         sharedDefaults.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
         sharedDefaults.set(now, forKey: AppConstants.Keys.lastBlockDate)
 
@@ -73,7 +73,7 @@ class MonitoringManager {
 
         _ = performHardDayRolloverResetIfNeeded()
 
-        let lastIndex  = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
+        let lastIndex  = sharedDefaults?.integer(forKey: AppConstants.Keys.lastThresholdIndex) ?? 0
         let blockSize  = AppConstants.currentBlockSize
         let maxMinutes = AppConstants.maxThresholdMinuteOfDay
 

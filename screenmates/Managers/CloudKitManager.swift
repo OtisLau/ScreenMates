@@ -569,7 +569,7 @@ class CloudKitManager: ObservableObject {
         // Resetting LastThresholdIndex means the next threshold callback will be treated as new.
         // In this build, includesPastActivity is disabled, so setup/restarts don't backfill old usage.
         sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
-        sharedDefaults?.set(0, forKey: "LastThresholdIndex")
+        sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
         // Remove the upload throttle timestamps so the extension uploads on the very next threshold
         sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")
@@ -598,9 +598,10 @@ class CloudKitManager: ObservableObject {
                 guard let self else { completion?(); return }
                 if let saveError {
                     print(" Reset upload failed: \(saveError.localizedDescription)")
-                } else {
-                    print(" Reset uploaded to CloudKit")
+                    DispatchQueue.main.async { completion?() }
+                    return
                 }
+                print(" Reset uploaded to CloudKit")
                 Task { @MainActor [weak self] in
                     await self?.refreshGroupNow(reason: "reset")
                     completion?()

@@ -18,60 +18,14 @@ struct ScreenMatesApp: App {
                     // Ensure CloudKit subscription so other devices get silent updates.
                     cloudManager.ensureGroupSubscription()
                 }
-                .onChange(of: scenePhase) { phase in
+                .onChange(of: scenePhase) { _, phase in
                     guard phase == .active, cloudManager.isSetupDone else { return }
-                    // Every time the app comes to the foreground, check whether the OS
-                    // killed the DeviceActivity monitoring session while we were away.
-                    // If it did, silently restart it so tracking resumes immediately.
-                    let activities = DeviceActivityCenter().activities
-                    if !activities.contains(DeviceActivityName("dailyTracking")) {
-                        print(" Monitoring was dead on foreground — auto-restarting")
-                        MonitoringManager.shared.restartMonitoring()
-                        return
-                    }
-
-                    // If the currently registered batch is exhausted (e.g. block 96/192
-                    // in 96-event mode), auto-register the next batch so tracking
-                    // doesn't silently stall.
-                    let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
-                    let lastIndex = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
-                    let lastAutoRollover = sharedDefaults?.integer(forKey: AppConstants.Keys.lastAutoBatchRolloverIndex) ?? 0
-
-                    let exhaustedBatch = lastIndex > 0 &&
-                        lastIndex % AppConstants.eventsPerMonitoringBatch == 0 &&
-                        lastIndex < AppConstants.maxTrackableBlocksPerDay
-
-                    if exhaustedBatch && lastAutoRollover != lastIndex {
-                        print(" Batch exhausted at block_\(lastIndex) — auto-registering next batch")
-                        sharedDefaults?.set(lastIndex, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-                        MonitoringManager.shared.restartMonitoring()
-                    }
+                    ensureMonitoringActive(context: "foreground")
                 }
         }
         .backgroundTask(.appRefresh(AppConstants.backgroundTaskIdentifier)) {
             print(" Background task triggered at \(Date())")
-
-            // Mirror the foreground exhausted-batch check so tracking doesn't stall
-            // when the user never brings the app to foreground after block_96.
-            let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
-            let lastIndex = sharedDefaults?.integer(forKey: "LastThresholdIndex") ?? 0
-            let lastAutoRollover = sharedDefaults?.integer(forKey: AppConstants.Keys.lastAutoBatchRolloverIndex) ?? 0
-            let activities = DeviceActivityCenter().activities
-
-            if !activities.contains(DeviceActivityName("dailyTracking")) {
-                print(" Monitoring dead in background — auto-restarting")
-                MonitoringManager.shared.restartMonitoring()
-            } else {
-                let exhaustedBatch = lastIndex > 0 &&
-                    lastIndex % AppConstants.eventsPerMonitoringBatch == 0 &&
-                    lastIndex < AppConstants.maxTrackableBlocksPerDay
-
-                if exhaustedBatch && lastAutoRollover != lastIndex {
-                    print(" Batch exhausted at block_\(lastIndex) in background — rolling over")
-                    sharedDefaults?.set(lastIndex, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-                    MonitoringManager.shared.restartMonitoring()
-                }
-            }
+            await MainActor.run { ensureMonitoringActive(context: "background") }
 
             let result = await cloudManager.performBackgroundCheckDetailed()
             
@@ -94,6 +48,31 @@ struct ScreenMatesApp: App {
         }
     }
     
+    // Check that DeviceActivity monitoring is running and the current batch isn't
+    // exhausted. Called on every foreground activation and background task wake.
+    private func ensureMonitoringActive(context: String) {
+        let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
+        let activities = DeviceActivityCenter().activities
+
+        guard activities.contains(DeviceActivityName("dailyTracking")) else {
+            print(" Monitoring dead (\(context)) — auto-restarting")
+            MonitoringManager.shared.restartMonitoring()
+            return
+        }
+
+        let lastIndex = sharedDefaults?.integer(forKey: AppConstants.Keys.lastThresholdIndex) ?? 0
+        let lastAutoRollover = sharedDefaults?.integer(forKey: AppConstants.Keys.lastAutoBatchRolloverIndex) ?? 0
+        let exhaustedBatch = lastIndex > 0 &&
+            lastIndex % AppConstants.eventsPerMonitoringBatch == 0 &&
+            lastIndex < AppConstants.maxTrackableBlocksPerDay
+
+        if exhaustedBatch && lastAutoRollover != lastIndex {
+            print(" Batch exhausted at block_\(lastIndex) (\(context)) — rolling over")
+            sharedDefaults?.set(lastIndex, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
+            MonitoringManager.shared.restartMonitoring()
+        }
+    }
+
     private func scheduleBackgroundRefresh() {
         let request = BGAppRefreshTaskRequest(identifier: AppConstants.backgroundTaskIdentifier)
         request.earliestBeginDate = Date(timeIntervalSinceNow: AppConstants.backgroundTaskInterval)

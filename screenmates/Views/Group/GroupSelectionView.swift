@@ -2,7 +2,7 @@ import SwiftUI
 
 // Join or create a group.
 struct GroupSelectionView: View {
-    @StateObject private var cloudManager = CloudKitManager.shared
+    @ObservedObject private var cloudManager = CloudKitManager.shared
 
     @State private var groupInput: String = ""
     @State private var isWorking = false

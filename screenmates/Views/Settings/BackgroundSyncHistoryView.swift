@@ -8,7 +8,7 @@ struct BackgroundSyncHistoryView: View {
         List {
             if history.isEmpty {
                 Text("No background syncs yet")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding()
             } else {
@@ -16,31 +16,31 @@ struct BackgroundSyncHistoryView: View {
                     if let timestamp = entry["timestamp"] as? Date,
                        let success = entry["success"] as? Bool,
                        let blocks = entry["blocks"] as? Int {
-                        
+
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Image(systemName: success ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .foregroundColor(success ? .green : .red)
-                                
+                                    .foregroundStyle(success ? Color.green : Color.red)
+
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(timestamp.formatted(date: .abbreviated, time: .shortened))
                                         .font(.headline)
-                                    
+
                                     Text(DateHelpers.relativeTime(from: timestamp))
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundStyle(.secondary)
                                 }
-                                
+
                                 Spacer()
-                                
+
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text("\(blocks) blocks")
                                         .font(.headline)
-                                        .foregroundColor(.purple)
-                                    
+                                        .foregroundStyle(Color.purple)
+
                                     Text(success ? "Synced" : "Failed")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
 
@@ -49,7 +49,7 @@ struct BackgroundSyncHistoryView: View {
                                     if let message = entry["error"] as? String, !message.isEmpty {
                                         Text(message)
                                             .font(.caption)
-                                            .foregroundColor(.secondary)
+                                            .foregroundStyle(.secondary)
                                             .fixedSize(horizontal: false, vertical: true)
                                     }
 
@@ -57,12 +57,12 @@ struct BackgroundSyncHistoryView: View {
                                         if let code = entry["ckErrorCode"] as? Int {
                                             Text("CKError: \(code)")
                                                 .font(.caption2)
-                                                .foregroundColor(.secondary)
+                                                .foregroundStyle(.secondary)
                                         }
                                         if let retry = entry["retryAfterSeconds"] as? Double {
                                             Text("Retry after: \(Int(retry))s")
                                                 .font(.caption2)
-                                                .foregroundColor(.secondary)
+                                                .foregroundStyle(.secondary)
                                         }
                                     }
                                 }
@@ -72,11 +72,11 @@ struct BackgroundSyncHistoryView: View {
                     }
                 }
             }
-            
+
             Section {
                 Text("Background syncs happen automatically when the app is closed. iOS schedules them approximately every 15 minutes.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("Background Sync History")

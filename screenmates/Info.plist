@@ -7,7 +7,7 @@
 		<string>com.otishlau.screenmates.refresh</string>
 	</array>
 	<key>NSFamilyControlsUsageDescription</key>
-	<string>We need this to track your screen time limit.</string>
+	<string>ScreenMates uses Screen Time to measure your daily phone usage so you can compare it with friends and stay accountable together. No usage data is shared with anyone outside your group.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

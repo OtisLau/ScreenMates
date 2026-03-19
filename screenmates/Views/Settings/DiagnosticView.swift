@@ -8,7 +8,7 @@ struct DiagnosticView: View {
     @State private var isPingingCloudKit = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Status
@@ -131,44 +131,41 @@ struct DiagnosticView: View {
         cloudManager.usernameSet = true
         diagnosticResult += "\n\n Set display name to 'TestUser'\n"
         diagnosticResult += "Now forcing sync...\n"
-        
-        cloudManager.updateMyProfile { [self] in
-            cloudManager.fetchGroupData(useCache: false)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [self] in
+
+        cloudManager.updateMyProfile {
+            Task { @MainActor in
+                CloudKitManager.shared.fetchGroupData(useCache: false)
+                try? await Task.sleep(for: .seconds(2))
                 runDiagnostics()
             }
         }
     }
-    
+
     private func forceSync() {
         diagnosticResult += "\n\n Forcing sync...\n"
-        
+
         print("=== FORCE SYNC START ===")
         print("User ID: \(cloudManager.myID)")
         print("Display Name: \(cloudManager.myDisplayName)")
         print("Group ID: \(cloudManager.myGroupID)")
-        
-        cloudManager.updateMyProfile { [self] in
-            print(" updateMyProfile completed")
-            cloudManager.fetchGroupData(useCache: false)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [self] in
+
+        cloudManager.updateMyProfile {
+            Task { @MainActor in
+                print(" updateMyProfile completed")
+                CloudKitManager.shared.fetchGroupData(useCache: false)
+                try? await Task.sleep(for: .seconds(3))
                 diagnosticResult += "Sync completed, refreshing...\n"
                 runDiagnostics()
             }
         }
     }
-    
+
     private func checkCloudKit() {
         diagnosticResult += "\n\n Checking CloudKit...\n"
-        
-        // Check iCloud account status
-        cloudManager.container.accountStatus { [self] status, error in
-            DispatchQueue.main.async { [self] in
-                if let error = error {
-                    diagnosticResult += " Account check failed: \(error.localizedDescription)\n"
-                    return
-                }
 
+        Task { @MainActor in
+            do {
+                let status = try await cloudManager.container.accountStatus()
                 switch status {
                 case .available:
                     diagnosticResult += " iCloud account is available\n"
@@ -184,16 +181,18 @@ struct DiagnosticView: View {
                 @unknown default:
                     diagnosticResult += " Unknown iCloud status\n"
                 }
+            } catch {
+                diagnosticResult += " Account check failed: \(error.localizedDescription)\n"
+                return
+            }
 
-                if !cloudManager.myGroupID.isEmpty {
-                    diagnosticResult += "\nFetching group data...\n"
-                    cloudManager.fetchGroupData(useCache: false)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [self] in
-                        runDiagnostics()
-                    }
-                } else {
-                    diagnosticResult += " No group ID to check\n"
-                }
+            if !cloudManager.myGroupID.isEmpty {
+                diagnosticResult += "\nFetching group data...\n"
+                cloudManager.fetchGroupData(useCache: false)
+                try? await Task.sleep(for: .seconds(3))
+                runDiagnostics()
+            } else {
+                diagnosticResult += " No group ID to check\n"
             }
         }
     }
