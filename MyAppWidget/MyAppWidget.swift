@@ -83,7 +83,7 @@ private struct WidgetMemberRow: View {
                 .font(.system(size: isTop ? 17 : 15, weight: isTop ? .semibold : .regular))
                 .foregroundStyle(isTop ? Color.primary : Color.primary.opacity(0.7))
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.5)
                 .layoutPriority(1)
 
             Spacer(minLength: 4)
@@ -186,7 +186,7 @@ struct MyAppWidget: Widget {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             MyAppWidgetEntryView(entry: entry)
                 .containerBackground(for: .widget) {
-                    Color(UIColor.systemBackground)
+                    Color.black
                 }
         }
         .configurationDisplayName("ScreenMates Group")
