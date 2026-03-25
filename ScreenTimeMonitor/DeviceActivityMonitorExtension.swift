@@ -231,12 +231,16 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     }
 
     // Keeps large threshold jumps plausible: if iOS wakes us with a far-future block index
-    // (e.g. block_96 right after setup), cap the recovered delta by elapsed time.
+    // (e.g. block_96 right after setup or after a monitoring restart), cap the recovered
+    // delta by how much time has actually elapsed since the reference event.
     //
-    // Only applies within the first 20 minutes after fresh setup — the window where iOS
-    // might replay pre-setup activity despite includesPastActivity=false.
-    // After that window, we trust any delta iOS delivers: sequential callbacks can arrive
-    // in rapid succession when the extension was suspended, and clamping them drops real blocks.
+    // Two clamping windows:
+    //   1. "recent-setup": within 20 min of startMonitoring — guards against iOS replaying
+    //      pre-setup activity despite includesPastActivity=false.
+    //   2. "last-threshold": always active when lastIndex == 0 and a last-threshold date is
+    //      recorded — guards against a monitoring restart resetting lastIndex to 0 while iOS
+    //      immediately fires a high block number (which would add the full index as delta).
+    //      After the first real threshold fires post-restart this case no longer triggers.
     private func appliedDeltaForThresholdJump(
         rawDelta: Int,
         lastIndex: Int,
@@ -249,6 +253,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let secondsPerBlock = TimeInterval(max(blockSizeMinutes, 1) * 60)
         guard secondsPerBlock > 0 else { return rawDelta }
 
+        // Window 1: clamp during the first 20 min after monitoring was set up.
         if let setupDate = sharedDefaults.object(forKey: monitoringSetupKey) as? Date {
             let setupAge = now.timeIntervalSince(setupDate)
             if setupAge >= 0 && setupAge <= recentSetupClampWindow {
@@ -263,6 +268,24 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
                     sharedDefaults: sharedDefaults
                 )
             }
+        }
+
+        // Window 2: if a prior threshold date exists, use it as the time reference to cap
+        // how many blocks can plausibly have elapsed since then.  This catches large jumps
+        // at any point in the day — not just when lastIndex == 0 — so a delayed iOS
+        // catch-up callback (e.g. block_96 arriving after block_5) can't add 91 blocks
+        // in one shot and peg usage at 24 hours.
+        if let lastThresholdDate = sharedDefaults.object(forKey: lastThresholdDateKey) as? Date {
+            return clampDeltaIfNeeded(
+                rawDelta: rawDelta,
+                lastIndex: lastIndex,
+                thresholdIndex: thresholdIndex,
+                reason: "last-threshold",
+                referenceDate: lastThresholdDate,
+                secondsPerBlock: secondsPerBlock,
+                now: now,
+                sharedDefaults: sharedDefaults
+            )
         }
 
         return rawDelta

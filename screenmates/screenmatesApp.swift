@@ -52,6 +52,18 @@ struct ScreenMatesApp: App {
     // exhausted. Called on every foreground activation and background task wake.
     private func ensureMonitoringActive(context: String) {
         let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
+
+        // New-day check: restart monitoring before anything else if we're on a new day.
+        // Without this, the repeating DeviceActivitySchedule keeps firing yesterday's
+        // high-index thresholds (e.g. block_21 at 315 min), so no threshold fires for
+        // hours into the new day and both the UI and CloudKit stay at yesterday's count.
+        let lastBlockDate = sharedDefaults?.object(forKey: AppConstants.Keys.lastBlockDate) as? Date ?? .distantPast
+        if !Calendar.current.isDateInToday(lastBlockDate) {
+            print(" New day detected (\(context)) — rolling over and restarting monitoring")
+            MonitoringManager.shared.restartMonitoring()
+            return
+        }
+
         let activities = DeviceActivityCenter().activities
 
         guard activities.contains(DeviceActivityName("dailyTracking")) else {
