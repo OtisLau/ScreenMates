@@ -80,28 +80,28 @@ private struct WidgetMemberRow: View {
 
             // Name
             Text(member.displayName)
-                .font(.system(size: isTop ? 17 : 15, weight: isTop ? .semibold : .regular))
+                .font(.system(size: isTop ? 16 : 14, weight: isTop ? .semibold : .regular))
                 .foregroundStyle(isTop ? Color.primary : Color.primary.opacity(0.7))
                 .lineLimit(1)
-                .minimumScaleFactor(0.5)
+                .minimumScaleFactor(0.4)
                 .layoutPriority(1)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 0)
 
             // Time
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 if hours > 0 {
                     Text("\(hours)")
-                        .font(.system(size: isTop ? 17 : 15, weight: .semibold, design: .rounded))
+                        .font(.system(size: isTop ? 15 : 13, weight: .semibold, design: .rounded))
                     Text("h")
-                        .font(.system(size: isTop ? 12 : 11, weight: .regular, design: .rounded))
+                        .font(.system(size: isTop ? 11 : 10, weight: .regular, design: .rounded))
                         .foregroundStyle(.secondary)
                         .padding(.trailing, 2)
                 }
                 Text("\(mins)")
-                    .font(.system(size: isTop ? 17 : 15, weight: .semibold, design: .rounded))
+                    .font(.system(size: isTop ? 15 : 13, weight: .semibold, design: .rounded))
                 Text("m")
-                    .font(.system(size: isTop ? 12 : 11, weight: .regular, design: .rounded))
+                    .font(.system(size: isTop ? 11 : 10, weight: .regular, design: .rounded))
                     .foregroundStyle(.secondary)
             }
             .foregroundStyle(.primary)
