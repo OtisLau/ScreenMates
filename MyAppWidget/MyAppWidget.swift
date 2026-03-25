@@ -89,19 +89,19 @@ private struct WidgetMemberRow: View {
             Spacer(minLength: 0)
 
             // Time
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
                 if hours > 0 {
                     Text("\(hours)")
-                        .font(.system(size: isTop ? 15 : 13, weight: .semibold, design: .rounded))
+                        .font(.system(size: isTop ? 13 : 12, weight: .semibold, design: .rounded))
                     Text("h")
-                        .font(.system(size: isTop ? 11 : 10, weight: .regular, design: .rounded))
+                        .font(.system(size: isTop ? 10 : 9, weight: .regular, design: .rounded))
                         .foregroundStyle(.secondary)
                         .padding(.trailing, 2)
                 }
                 Text("\(mins)")
-                    .font(.system(size: isTop ? 15 : 13, weight: .semibold, design: .rounded))
+                    .font(.system(size: isTop ? 13 : 12, weight: .semibold, design: .rounded))
                 Text("m")
-                    .font(.system(size: isTop ? 11 : 10, weight: .regular, design: .rounded))
+                    .font(.system(size: isTop ? 10 : 9, weight: .regular, design: .rounded))
                     .foregroundStyle(.secondary)
             }
             .foregroundStyle(.primary)
