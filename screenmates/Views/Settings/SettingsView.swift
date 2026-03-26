@@ -10,6 +10,10 @@ struct SettingsView: View {
     @State private var limitHours: Int = 0
     @State private var limitMinutes: Int = 0
 
+    private var limitChanged: Bool {
+        limitHours * 60 + limitMinutes != cloudManager.groupGoalMinutes
+    }
+
     private func loadLimit() {
         limitHours   = cloudManager.groupGoalMinutes / 60
         limitMinutes = (cloudManager.groupGoalMinutes % 60 / 5) * 5
@@ -120,7 +124,6 @@ struct SettingsView: View {
                             Spacer()
                             Stepper("\(limitHours)h", value: $limitHours, in: 0...12)
                                 .labelsHidden()
-                                .onChange(of: limitHours) { _, _ in saveLimit() }
                             Text("\(limitHours)h")
                                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                                 .frame(minWidth: 36, alignment: .trailing)
@@ -132,10 +135,21 @@ struct SettingsView: View {
                             Spacer()
                             Stepper("\(limitMinutes)m", value: $limitMinutes, in: 0...55, step: 5)
                                 .labelsHidden()
-                                .onChange(of: limitMinutes) { _, _ in saveLimit() }
                             Text("\(limitMinutes)m")
                                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                                 .frame(minWidth: 36, alignment: .trailing)
+                        }
+
+                        if limitChanged {
+                            Button {
+                                saveLimit()
+                            } label: {
+                                Text("Update")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.blue)
                         }
 
                     }

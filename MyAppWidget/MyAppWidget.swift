@@ -167,6 +167,7 @@ private struct WidgetProgressBorder: View {
 
     private var ringColor: Color {
         if remaining < 0.10 { return Color(UIColor.systemRed).opacity(0.85) }
+        if remaining < 0.25 { return Color(red: 1.0, green: 0.75, blue: 0.2).opacity(0.9) }
         return Color.white.opacity(0.88)
     }
 

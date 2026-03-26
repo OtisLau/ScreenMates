@@ -27,6 +27,7 @@ class CloudKitManager: ObservableObject {
 
     // Shared group daily limit — synced from the SocialGroup CloudKit record.
     @Published var groupGoalMinutes: Int = 0
+    private var lastGoalUpdateTime: Date = .distantPast
 
     // Tracks which group we last subscribed to so we don't re-subscribe every launch
     @AppStorage("last_subscription_group_id") private var lastSubscriptionGroupID: String = ""
@@ -230,6 +231,8 @@ class CloudKitManager: ObservableObject {
                    let firstMatch = matchResults.first,
                    case .success(let record) = firstMatch.1 {
                     let fetched = record["goal_minutes"] as? Int ?? 0
+                    // Skip if we just saved a local goal — wait for CloudKit to propagate
+                    guard Date().timeIntervalSince(self.lastGoalUpdateTime) > 10 else { return }
                     self.groupGoalMinutes = fetched
                     // Persist locally so it shows instantly on next launch
                     UserDefaults.standard.set(fetched, forKey: "cached_group_goal_minutes")
@@ -243,6 +246,7 @@ class CloudKitManager: ObservableObject {
     func updateGroupGoal(_ minutes: Int) {
         guard !myGroupID.isEmpty else { return }
         groupGoalMinutes = minutes
+        lastGoalUpdateTime = Date()
         UserDefaults.standard.set(minutes, forKey: "cached_group_goal_minutes")
         sharedDefaults?.set(minutes, forKey: AppConstants.Keys.sharedGoalMinutes)
 
