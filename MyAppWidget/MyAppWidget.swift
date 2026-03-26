@@ -16,6 +16,7 @@ struct CachedMember: Codable, Identifiable {
     let displayName: String
     let blocks: Int
     let lastUpdate: Date
+    let postMidnightBlocks: Int?
 
     func minutesUsed(blockSize: Int) -> Int { blocks * blockSize }
 

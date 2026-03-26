@@ -127,6 +127,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let displayName: String
         var blocks: Int
         var lastUpdate: Date
+        var postMidnightBlocks: Int?
     }
 
     // Updates the current user's row in the leaderboard cache.
