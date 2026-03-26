@@ -7,6 +7,9 @@ struct SettingsView: View {
     @State private var showingLeaveConfirm = false
     @State private var codeCopied = false
 
+    @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
+    @State private var notificationPermissionDenied = false
+
     @State private var limitHours: Int = 0
     @State private var limitMinutes: Int = 0
 
@@ -105,6 +108,40 @@ struct SettingsView: View {
                     }
                 }
 
+                // Notifications
+                Section {
+                    Toggle(isOn: $notificationsEnabled) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "bell.badge")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
+                            Text("Notifications")
+                        }
+                    }
+
+                    if notificationPermissionDenied {
+                        Button {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "gear")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 20)
+                                Text("Enable in Settings")
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    Text("Get sarcastic updates when group members go over the limit or doom scroll past midnight")
+                }
+
                 // Limit
                 Section {
                     VStack(alignment: .leading, spacing: 16) {
@@ -179,7 +216,13 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { loadLimit() }
+            .onAppear {
+                loadLimit()
+                Task {
+                    let authorized = await NotificationManager.shared.isAuthorized
+                    await MainActor.run { notificationPermissionDenied = !authorized }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
