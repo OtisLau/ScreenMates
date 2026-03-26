@@ -94,6 +94,14 @@ struct AppConstants {
         // Shared between the extension (writes) and the app (reads/resets).
         static let lastThresholdIndex = "LastThresholdIndex"
         static let sharedGoalMinutes = "SharedGoalMinutes"
+
+        // Post-midnight tracking (blocks accumulated between 12AM–4AM)
+        static let postMidnightBlocksUsed = "PostMidnightBlocksUsed"
+        static let yesterdayPostMidnightBlocks = "YesterdayPostMidnightBlocks"
+
+        // Notification dedup — stores sent notification keys for today
+        static let notificationsSentToday = "NotificationsSentToday"
+        static let notificationsSentDate = "NotificationsSentDate"
     }
 
     static func thresholdEventsPerDay(for blockSize: Int) -> Int {

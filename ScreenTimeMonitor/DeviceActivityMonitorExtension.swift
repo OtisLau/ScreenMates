@@ -94,6 +94,14 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
         currentBlocks = min(currentBlocks, maxTrackableBlocksPerDay)
 
+        // 2b. Track post-midnight usage (12AM–4AM) for doom scroll notifications
+        let hour = Calendar.current.component(.hour, from: now)
+        if hour < 4 {
+            let delta = currentBlocks - sharedDefaults.integer(forKey: "DailyBlocksUsed")
+            let postMidnight = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
+            sharedDefaults.set(postMidnight + max(delta, 1), forKey: "PostMidnightBlocksUsed")
+        }
+
         // 3. Persist
         sharedDefaults.set(currentBlocks, forKey: "DailyBlocksUsed")
         sharedDefaults.set(now, forKey: "LastBlockDate")
@@ -193,10 +201,12 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
                     record = CKRecord(recordType: "UserProfile", recordID: recordID)
                 }
 
+                let postMidnightBlocks = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
                 record["user_id"] = userID
                 record["display_name"] = displayName
                 record["group_id"] = groupID
                 record["blocks_used"] = currentBlocks
+                record["post_midnight_blocks"] = postMidnightBlocks
                 record["last_updated"] = Date()
                 record["last_active_date"] = Date()
 
@@ -208,6 +218,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
                     latest["display_name"] = displayName
                     latest["group_id"] = groupID
                     latest["blocks_used"] = currentBlocks
+                    latest["post_midnight_blocks"] = postMidnightBlocks
                     latest["last_updated"] = Date()
                     latest["last_active_date"] = Date()
                     _ = try await database.save(latest)
@@ -318,9 +329,14 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     // Keep extension-side day reset behavior aligned with the app-side reset.
     private func performHardDayRolloverReset(sharedDefaults: UserDefaults) {
+        // Snapshot post-midnight blocks before zeroing so morning notifications can reference them
+        let postMidnight = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
+        sharedDefaults.set(postMidnight, forKey: "YesterdayPostMidnightBlocks")
+
         sharedDefaults.set(0, forKey: "DailyBlocksUsed")
         sharedDefaults.set(0, forKey: lastThresholdIndexKey)
         sharedDefaults.set(0, forKey: "LastAutoBatchRolloverIndex")
+        sharedDefaults.set(0, forKey: "PostMidnightBlocksUsed")
         sharedDefaults.set(Date(), forKey: "LastBlockDate")
         sharedDefaults.removeObject(forKey: "LastExtensionCloudUpload")
         sharedDefaults.removeObject(forKey: "LastExtensionCloudUploadAttempt")
