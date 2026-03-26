@@ -79,6 +79,7 @@ class CloudKitManager: ObservableObject {
         sharedDefaults?.set(AppConstants.currentBlockSize, forKey: AppConstants.Keys.sharedBlockSizeMinutes)
         // Mirror the upload throttle so the extension uses the same test/prod timing as the main app
         sharedDefaults?.set(AppConstants.uploadThrottleSeconds, forKey: AppConstants.Keys.sharedUploadThrottle)
+        sharedDefaults?.set(groupGoalMinutes, forKey: AppConstants.Keys.sharedGoalMinutes)
     }
 
     // MARK: - CloudKit Subscriptions
@@ -232,6 +233,7 @@ class CloudKitManager: ObservableObject {
                     self.groupGoalMinutes = fetched
                     // Persist locally so it shows instantly on next launch
                     UserDefaults.standard.set(fetched, forKey: "cached_group_goal_minutes")
+                    self.sharedDefaults?.set(fetched, forKey: AppConstants.Keys.sharedGoalMinutes)
                 }
             }
         }
@@ -242,6 +244,7 @@ class CloudKitManager: ObservableObject {
         guard !myGroupID.isEmpty else { return }
         groupGoalMinutes = minutes
         UserDefaults.standard.set(minutes, forKey: "cached_group_goal_minutes")
+        sharedDefaults?.set(minutes, forKey: AppConstants.Keys.sharedGoalMinutes)
 
         let recordID = CKRecord.ID(recordName: myGroupID)
         database.fetch(withRecordID: recordID) { [weak self] record, error in

@@ -93,6 +93,7 @@ struct AppConstants {
         // The index of the last threshold event processed by the extension.
         // Shared between the extension (writes) and the app (reads/resets).
         static let lastThresholdIndex = "LastThresholdIndex"
+        static let sharedGoalMinutes = "SharedGoalMinutes"
     }
 
     static func thresholdEventsPerDay(for blockSize: Int) -> Int {
