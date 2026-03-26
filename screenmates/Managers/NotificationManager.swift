@@ -4,7 +4,10 @@ import UserNotifications
 class NotificationManager {
     static let shared = NotificationManager()
     private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
-    private init() {}
+    private init() {
+        // Register default so existing users have notifications enabled
+        UserDefaults.standard.register(defaults: ["notificationsEnabled": true])
+    }
 
     // MARK: - Permission
 
