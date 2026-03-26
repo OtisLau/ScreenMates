@@ -29,7 +29,7 @@ struct DashboardView: View {
                         UserStatsCard(
                             minutesUsed: myMinutesUsed,
                             displayName: cloudManager.myDisplayName,
-                            goalMinutes: cloudManager.dailyGoalMinutes
+                            goalMinutes: cloudManager.groupGoalMinutes
                         )
                         .padding(.horizontal, 24)
                         .padding(.top, 8)

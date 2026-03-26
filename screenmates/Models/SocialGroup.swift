@@ -8,17 +8,20 @@ struct SocialGroup {
     var groupID: String
     var memberCount: Int
     var createdDate: Date
+    var goalMinutes: Int   // shared daily limit for all members; 0 = no limit
 
     init(
         recordID: CKRecord.ID? = nil,
         groupID: String,
         memberCount: Int = 0,
-        createdDate: Date = Date()
+        createdDate: Date = Date(),
+        goalMinutes: Int = 0
     ) {
         self.recordID = recordID
         self.groupID = groupID
         self.memberCount = memberCount
         self.createdDate = createdDate
+        self.goalMinutes = goalMinutes
     }
 
     // Convert to a CloudKit record for saving
@@ -32,6 +35,7 @@ struct SocialGroup {
         record["group_id"] = groupID
         record["member_count"] = memberCount
         record["created_date"] = createdDate
+        record["goal_minutes"] = goalMinutes
         return record
     }
 
@@ -42,7 +46,8 @@ struct SocialGroup {
             recordID: record.recordID,
             groupID: groupID,
             memberCount: record["member_count"] as? Int ?? 0,
-            createdDate: record["created_date"] as? Date ?? Date()
+            createdDate: record["created_date"] as? Date ?? Date(),
+            goalMinutes: record["goal_minutes"] as? Int ?? 0
         )
     }
 }

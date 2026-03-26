@@ -75,13 +75,13 @@ private struct WidgetMemberRow: View {
             // Rank
             Text("\(rank)")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.white.opacity(0.35))
                 .frame(width: 16, alignment: .center)
 
             // Name
             Text(member.displayName)
                 .font(.system(size: isTop ? 16 : 14, weight: isTop ? .semibold : .regular))
-                .foregroundStyle(isTop ? Color.primary : Color.primary.opacity(0.7))
+                .foregroundStyle(isTop ? Color.white : Color.white.opacity(0.7))
                 .lineLimit(1)
                 .minimumScaleFactor(0.4)
                 .layoutPriority(1)
@@ -95,16 +95,16 @@ private struct WidgetMemberRow: View {
                         .font(.system(size: isTop ? 13 : 12, weight: .semibold, design: .rounded))
                     Text("h")
                         .font(.system(size: isTop ? 10 : 9, weight: .regular, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.white.opacity(0.55))
                         .padding(.trailing, 2)
                 }
                 Text("\(mins)")
                     .font(.system(size: isTop ? 13 : 12, weight: .semibold, design: .rounded))
                 Text("m")
                     .font(.system(size: isTop ? 10 : 9, weight: .regular, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.white.opacity(0.55))
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(Color.white)
             .fixedSize(horizontal: true, vertical: false)
         }
     }
@@ -112,13 +112,11 @@ private struct WidgetMemberRow: View {
 
 // MARK: - Dot grid background (matches AppBackground in main app)
 private struct WidgetDotGrid: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
         Canvas { ctx, size in
             let spacing: CGFloat = 22
             let dotSize: CGFloat = 2.2
-            let dotColor = Color.primary.opacity(colorScheme == .dark ? 0.11 : 0.07)
+            let dotColor = Color.white.opacity(0.11)
             let cols = Int(size.width / spacing) + 2
             let rows = Int(size.height / spacing) + 2
             var path = Path()
@@ -150,7 +148,7 @@ struct MyAppWidgetEntryView: View {
                 if entry.members.isEmpty {
                     Text("Open app to start")
                         .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.white.opacity(0.55))
                         .frame(width: geo.size.width, height: geo.size.height)
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
@@ -164,7 +162,7 @@ struct MyAppWidgetEntryView: View {
                             .padding(.vertical, 10)
                             if index < entry.members.count - 1 {
                                 Rectangle()
-                                    .fill(Color.primary.opacity(0.07))
+                                    .fill(Color.white.opacity(0.07))
                                     .frame(height: 1)
                             }
                         }
@@ -185,6 +183,7 @@ struct MyAppWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             MyAppWidgetEntryView(entry: entry)
+                .environment(\.colorScheme, .dark)
                 .containerBackground(for: .widget) {
                     Color.black
                 }

@@ -11,12 +11,12 @@ struct SettingsView: View {
     @State private var limitMinutes: Int = 0
 
     private func loadLimit() {
-        limitHours   = cloudManager.dailyGoalMinutes / 60
-        limitMinutes = (cloudManager.dailyGoalMinutes % 60 / 5) * 5
+        limitHours   = cloudManager.groupGoalMinutes / 60
+        limitMinutes = (cloudManager.groupGoalMinutes % 60 / 5) * 5
     }
 
     private func saveLimit() {
-        cloudManager.dailyGoalMinutes = limitHours * 60 + limitMinutes
+        cloudManager.updateGroupGoal(limitHours * 60 + limitMinutes)
     }
 
     private var limitSummary: String {

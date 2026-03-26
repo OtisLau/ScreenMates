@@ -25,8 +25,8 @@ class CloudKitManager: ObservableObject {
     @AppStorage("is_setup_done") var isSetupDone: Bool = false
     @AppStorage("username_set") var usernameSet: Bool = false
 
-    // Daily screen time goal in minutes. Default = 120 min (2 hours).
-    @AppStorage("daily_goal_minutes") var dailyGoalMinutes: Int = 0
+    // Shared group daily limit — synced from the SocialGroup CloudKit record.
+    @Published var groupGoalMinutes: Int = 0
 
     // Tracks which group we last subscribed to so we don't re-subscribe every launch
     @AppStorage("last_subscription_group_id") private var lastSubscriptionGroupID: String = ""
@@ -67,6 +67,7 @@ class CloudKitManager: ObservableObject {
 
         loadCachedData()
         mirrorIdentityToAppGroup()
+        groupGoalMinutes = UserDefaults.standard.integer(forKey: "cached_group_goal_minutes")
     }
 
     // Copy identity and config into shared App Group storage so the background extension can read it
@@ -205,9 +206,59 @@ class CloudKitManager: ObservableObject {
     func leaveGroup() {
         myGroupID = ""
         groupMembers = []
+        groupGoalMinutes = 0
+        UserDefaults.standard.removeObject(forKey: "cached_group_goal_minutes")
         mirrorIdentityToAppGroup()
         clearCache()
         lastSubscriptionGroupID = ""
+    }
+
+    // MARK: - Group Goal (shared daily limit)
+
+    // Fetch the group's shared daily limit from CloudKit
+    func fetchGroupGoal() {
+        guard !myGroupID.isEmpty else { return }
+        let predicate = NSPredicate(format: "group_id == %@", myGroupID)
+        let query = CKQuery(recordType: "SocialGroup", predicate: predicate)
+
+        database.fetch(withQuery: query, inZoneWith: nil, resultsLimit: 1) { [weak self] result in
+            guard let self else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if case .success(let (matchResults, _)) = result,
+                   let firstMatch = matchResults.first,
+                   case .success(let record) = firstMatch.1 {
+                    let fetched = record["goal_minutes"] as? Int ?? 0
+                    self.groupGoalMinutes = fetched
+                    // Persist locally so it shows instantly on next launch
+                    UserDefaults.standard.set(fetched, forKey: "cached_group_goal_minutes")
+                }
+            }
+        }
+    }
+
+    // Update the group's shared daily limit in CloudKit
+    func updateGroupGoal(_ minutes: Int) {
+        guard !myGroupID.isEmpty else { return }
+        groupGoalMinutes = minutes
+        UserDefaults.standard.set(minutes, forKey: "cached_group_goal_minutes")
+
+        let recordID = CKRecord.ID(recordName: myGroupID)
+        database.fetch(withRecordID: recordID) { [weak self] record, error in
+            guard let self else { return }
+            guard let record else {
+                print(" Group record not found for goal update")
+                return
+            }
+            record["goal_minutes"] = minutes
+            self.database.save(record) { _, error in
+                if let error {
+                    print(" Group goal save failed: \(error.localizedDescription)")
+                } else {
+                    print(" Group goal saved: \(minutes) min")
+                }
+            }
+        }
     }
 
     // MARK: - Profile Updates
@@ -375,6 +426,7 @@ class CloudKitManager: ObservableObject {
             lastSyncTime = Date()
             let forceWidgetReload = reason == "pull-to-refresh" || reason == "manual" || reason == "appear"
             cacheLeaderboardData(forceWidgetReload: forceWidgetReload)
+            fetchGroupGoal()
         } catch {
             lastError = handleCloudKitError(error)
         }
