@@ -282,12 +282,13 @@ class CloudKitManager: ObservableObject {
         }
 
         let currentBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
+        let postMidnightBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.postMidnightBlocksUsed) ?? 0
         print(" Uploading profile: \(myDisplayName), \(currentBlocks) blocks")
 
         database.fetch(withRecordID: myUserProfileRecordID) { [weak self] record, error in
             guard let self else { completion?(); return }
             let profileRecord: CKRecord
-            
+
             if let record {
                 profileRecord = record
             } else if let ckError = error as? CKError, ckError.code == .unknownItem {
@@ -304,6 +305,7 @@ class CloudKitManager: ObservableObject {
             profileRecord["display_name"] = self.myDisplayName
             profileRecord["group_id"] = self.myGroupID
             profileRecord["blocks_used"] = currentBlocks
+            profileRecord["post_midnight_blocks"] = postMidnightBlocks
             profileRecord["last_updated"] = Date()
             profileRecord["last_active_date"] = Date()
 
@@ -331,6 +333,7 @@ class CloudKitManager: ObservableObject {
                             toSave["display_name"] = self.myDisplayName
                             toSave["group_id"] = self.myGroupID
                             toSave["blocks_used"] = self.sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
+                            toSave["post_midnight_blocks"] = self.sharedDefaults?.integer(forKey: AppConstants.Keys.postMidnightBlocksUsed) ?? 0
                             toSave["last_updated"] = Date()
                             toSave["last_active_date"] = Date()
                             self.saveProfileWithRetry(toSave, attemptsRemaining: attemptsRemaining - 1, completion: completion)
@@ -377,7 +380,8 @@ class CloudKitManager: ObservableObject {
                                 userID: userID,
                                 displayName: record["display_name"] as? String ?? userID,
                                 blocks: record["blocks_used"] as? Int ?? 0,
-                                lastUpdate: record["last_updated"] as? Date ?? Date()
+                                lastUpdate: record["last_updated"] as? Date ?? Date(),
+                                postMidnightBlocks: record["post_midnight_blocks"] as? Int ?? 0
                             ))
                         }
                     }
@@ -439,7 +443,7 @@ class CloudKitManager: ObservableObject {
         }
     }
 
-    private func fetchGroupMembersAsync() async throws -> [MemberData] {
+    func fetchGroupMembersAsync() async throws -> [MemberData] {
         let predicate = NSPredicate(format: "group_id == %@", myGroupID)
         let query = CKQuery(recordType: "UserProfile", predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "blocks_used", ascending: false)]
@@ -454,7 +458,8 @@ class CloudKitManager: ObservableObject {
                     userID: userID,
                     displayName: record["display_name"] as? String ?? userID,
                     blocks: record["blocks_used"] as? Int ?? 0,
-                    lastUpdate: record["last_updated"] as? Date ?? Date()
+                    lastUpdate: record["last_updated"] as? Date ?? Date(),
+                    postMidnightBlocks: record["post_midnight_blocks"] as? Int ?? 0
                 ))
             }
         }
@@ -532,10 +537,12 @@ class CloudKitManager: ObservableObject {
                 record = CKRecord(recordType: "UserProfile", recordID: myUserProfileRecordID)
             }
 
+            let postMidnightBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.postMidnightBlocksUsed) ?? 0
             record["user_id"] = myID
             record["display_name"] = myDisplayName
             record["group_id"] = myGroupID
             record["blocks_used"] = currentBlocks
+            record["post_midnight_blocks"] = postMidnightBlocks
             record["last_updated"] = Date()
             record["last_active_date"] = Date()
 
