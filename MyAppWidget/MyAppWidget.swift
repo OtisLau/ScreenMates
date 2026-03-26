@@ -141,35 +141,41 @@ private struct WidgetDotGrid: View {
     }
 }
 
-// MARK: - Progress border using ContainerRelativeShape for perfect corner matching
+// MARK: - Pie slice mask (lightweight alternative to AngularGradient)
+private struct PieSlice: Shape {
+    let fraction: Double
+
+    func path(in rect: CGRect) -> Path {
+        guard fraction > 0 else { return Path() }
+        guard fraction < 1 else { return Path(rect) }
+        var p = Path()
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = max(rect.width, rect.height)
+        p.move(to: center)
+        p.addArc(center: center, radius: radius,
+                 startAngle: .degrees(-90),
+                 endAngle: .degrees(-90 + 360 * fraction),
+                 clockwise: false)
+        p.closeSubpath()
+        return p
+    }
+}
+
+// MARK: - Progress border
 private struct WidgetProgressBorder: View {
-    let remaining: Double // 1.0 = full (no usage), 0.0 = empty (at/over limit)
+    let remaining: Double
 
     private var ringColor: Color {
-        if remaining <= 0       { return Color(red: 1.0, green: 0.3, blue: 0.3).opacity(0.85) }
-        if remaining < 0.10     { return Color(red: 1.0, green: 0.3, blue: 0.3).opacity(0.85) }
-        if remaining < 0.25     { return Color(red: 1.0, green: 0.75, blue: 0.2).opacity(0.9) }
+        if remaining <= 0   { return Color(red: 1.0, green: 0.3, blue: 0.3).opacity(0.85) }
+        if remaining < 0.10 { return Color(red: 1.0, green: 0.3, blue: 0.3).opacity(0.85) }
+        if remaining < 0.25 { return Color(red: 1.0, green: 0.75, blue: 0.2).opacity(0.9) }
         return Color.white.opacity(0.88)
     }
 
     var body: some View {
-        // Full border stroked with the ring color, masked by an angular gradient
-        // that reveals only the 'remaining' fraction starting from the top
         ContainerRelativeShape()
             .strokeBorder(ringColor, lineWidth: 4)
-            .mask {
-                AngularGradient(
-                    stops: [
-                        .init(color: .white, location: 0),
-                        .init(color: .white, location: max(remaining - 0.001, 0)),
-                        .init(color: .clear, location: max(remaining, 0.001)),
-                        .init(color: .clear, location: 1)
-                    ],
-                    center: .center,
-                    startAngle: .degrees(-90),
-                    endAngle: .degrees(270)
-                )
-            }
+            .mask { PieSlice(fraction: remaining) }
     }
 }
 
@@ -221,6 +227,7 @@ struct MyAppWidgetEntryView: View {
 
                 if entry.goalMinutes > 0 {
                     WidgetProgressBorder(remaining: myRemaining)
+                        .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
         }
