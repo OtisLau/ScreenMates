@@ -438,6 +438,13 @@ class CloudKitManager: ObservableObject {
             let forceWidgetReload = reason == "pull-to-refresh" || reason == "manual" || reason == "appear"
             cacheLeaderboardData(forceWidgetReload: forceWidgetReload)
             fetchGroupGoal()
+
+            // Evaluate notification scenarios after every group refresh
+            NotificationManager.shared.evaluateAndSchedule(
+                groupMembers: members,
+                myUserID: myID,
+                goalMinutes: groupGoalMinutes
+            )
         } catch {
             lastError = handleCloudKitError(error)
         }

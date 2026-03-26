@@ -28,7 +28,16 @@ struct ScreenMatesApp: App {
             await MainActor.run { ensureMonitoringActive(context: "background") }
 
             let result = await cloudManager.performBackgroundCheckDetailed()
-            
+
+            // Fetch group data and evaluate notifications in background
+            if let members = try? await cloudManager.fetchGroupMembersAsync() {
+                NotificationManager.shared.evaluateAndSchedule(
+                    groupMembers: members,
+                    myUserID: cloudManager.myID,
+                    goalMinutes: cloudManager.groupGoalMinutes
+                )
+            }
+
             // Log this background sync attempt
             await MainActor.run {
                 logBackgroundSync(
