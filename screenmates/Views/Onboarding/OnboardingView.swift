@@ -19,6 +19,7 @@ struct OnboardingView: View {
     @ObservedObject var cloudManager = CloudKitManager.shared
 
     @State private var permissionGranted = false
+    @State private var notificationGranted = false
     @State private var isStartingMonitoring = false
     @State private var showAuthError = false
     @State private var authErrorMessage = ""
@@ -62,6 +63,15 @@ struct OnboardingView: View {
                         action: requestPermissions
                     )
 
+                    stepCard(
+                        number: 2,
+                        title: "Enable Notifications",
+                        subtitle: "Get notified about your group's screen time",
+                        icon: "bell.badge.fill",
+                        done: notificationGranted,
+                        action: requestNotifications
+                    )
+
                     // Continue button
                     Button {
                         startMonitoring()
@@ -89,6 +99,9 @@ struct OnboardingView: View {
         }
         .onAppear {
             permissionGranted = (center.authorizationStatus == .approved)
+            Task {
+                notificationGranted = await NotificationManager.shared.isAuthorized
+            }
         }
         .alert("Screen Time Permission", isPresented: $showAuthError) {
             Button("OK") {}
@@ -138,6 +151,18 @@ struct OnboardingView: View {
             .glassCard(cornerRadius: AppTheme.cornerRadiusLarge)
         }
         .buttonStyle(.plain)
+    }
+
+    private func requestNotifications() {
+        Task {
+            let granted = await NotificationManager.shared.requestPermission()
+            await MainActor.run {
+                notificationGranted = granted
+                if granted {
+                    UserDefaults.standard.set(true, forKey: "notificationsEnabled")
+                }
+            }
+        }
     }
 
     private func requestPermissions() {
