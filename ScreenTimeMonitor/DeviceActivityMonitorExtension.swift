@@ -300,6 +300,19 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             )
         }
 
+        // No prior threshold date (cleared by day rollover or fresh install).
+        // This is the first threshold of the day — cap delta at 1 to prevent
+        // iOS firing a high block index and over-counting on a clean slate.
+        if lastIndex == 0 && rawDelta > 1 {
+            sharedDefaults.set(rawDelta, forKey: deltaClampDebugRawKey)
+            sharedDefaults.set(1, forKey: deltaClampDebugAppliedKey)
+            sharedDefaults.set(now, forKey: deltaClampDebugDateKey)
+            sharedDefaults.set("first-of-day", forKey: deltaClampDebugReasonKey)
+            sharedDefaults.set("block_0->block_\(thresholdIndex)", forKey: deltaClampDebugRangeKey)
+            print(" Clamped first-of-day delta \(rawDelta) to 1")
+            return 1
+        }
+
         return rawDelta
     }
 
@@ -341,6 +354,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         sharedDefaults.set(Date(), forKey: "LastBlockDate")
         sharedDefaults.removeObject(forKey: "LastExtensionCloudUpload")
         sharedDefaults.removeObject(forKey: "LastExtensionCloudUploadAttempt")
+        // Clear stale threshold date so delta clamping uses today's reference,
+        // not yesterday's — prevents over-counting on the first threshold after midnight.
+        sharedDefaults.removeObject(forKey: lastThresholdDateKey)
     }
 }
 

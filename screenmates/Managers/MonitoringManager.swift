@@ -29,6 +29,9 @@ class MonitoringManager {
         // Remove upload throttles so the first post-midnight threshold uploads immediately.
         sharedDefaults.removeObject(forKey: "LastExtensionCloudUpload")
         sharedDefaults.removeObject(forKey: "LastExtensionCloudUploadAttempt")
+        // Clear stale threshold date so delta clamping uses today's reference,
+        // not yesterday's — prevents over-counting on the first threshold after midnight.
+        sharedDefaults.removeObject(forKey: "LastExtensionThresholdDate")
 
         return true
     }
