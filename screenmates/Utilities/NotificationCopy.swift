@@ -7,9 +7,11 @@ struct NotificationCopy {
     // MARK: - Over Limit
 
     static let overLimitTitles = [
-        "ScreenMates",
+        "oh no",
         "limit reached",
         "well well well",
+        "yikes",
+        "not again",
     ]
 
     static let overLimitBodies = [
@@ -24,8 +26,10 @@ struct NotificationCopy {
 
     static let endOfDayTitles = [
         "daily recap",
-        "ScreenMates",
+        "the damage report",
+        "so about today",
         "end of day report",
+        "tonight's highlights",
     ]
 
     static let endOfDayBodies = [
@@ -41,7 +45,9 @@ struct NotificationCopy {
     static let morningDoomTitles = [
         "good morning",
         "sleep report",
-        "ScreenMates",
+        "rise and shame",
+        "last night was rough",
+        "about last night",
     ]
 
     static let morningDoomBodies = [
