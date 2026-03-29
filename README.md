@@ -30,7 +30,7 @@ ScreenMates is an iOS app that tracks daily screen time and shares totals with a
 
 ## Requirements
 
-- iOS 17+
+- iOS 17.6+
 - Screen Time enabled
 - iCloud account (for group sync)
 
@@ -40,4 +40,3 @@ ScreenMates is an iOS app that tracks daily screen time and shares totals with a
 2. Build and run on a real device.
 3. Complete onboarding and grant Screen Time permission.
 
-See `QUICK_START.md` for setup details.
