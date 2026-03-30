@@ -66,7 +66,11 @@ class NotificationManager {
             let dedupKey = "overLimit-\(member.userID)-\(today)"
             guard !hasAlreadySent(key: dedupKey) else { continue }
 
-            let copy = NotificationCopy.randomOverLimit(name: member.displayName)
+            let copy = NotificationCopy.randomOverLimit(
+                name: member.displayName,
+                time: NotificationCopy.formatTime(member.minutesUsed),
+                limit: NotificationCopy.formatTime(goalMinutes)
+            )
             let content = UNMutableNotificationContent()
             content.title = copy.title
             content.body = copy.body

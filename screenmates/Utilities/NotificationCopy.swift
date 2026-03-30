@@ -1,25 +1,30 @@
 import Foundation
 
-// Sarcastic notification templates for each scenario.
-// {name} and {time} are replaced at schedule time.
 struct NotificationCopy {
 
     // MARK: - Over Limit
 
-    static let overLimitTitles = [
-        "oh no",
-        "limit reached",
-        "well well well",
-        "yikes",
-        "not again",
-    ]
-
     static let overLimitBodies = [
-        "big round of applause for {name}. they went over today's limit",
-        "{name} just blew past the limit. we're all very proud",
-        "oh nice {name} exceeded the daily limit. cool cool cool",
-        "breaking news: {name} has gone over the limit. truly shocking",
-        "{name} said 'what limit' apparently",
+        "{time} today be serious",
+        "just blew past the limit like it wasnt even there",
+        "went right past the limit of {limit}",
+        "the limit meant nothing to you pal",
+        "thats enough phone for today respectfully",
+        "put the phone down gently",
+        "go outside for 10 minutes",
+        "this is why we set the limit",
+        "we had one rule",
+        "be honest you knew the limit was there",
+        "saw the limit and said not today",
+        "unbelievable performance today",
+        "strong phone usage today",
+        "this is getting hard to defend",
+        "we need to talk about this",
+        "tough look today",
+        "the phone is winning",
+        "you lost today",
+        "this is becoming a pattern",
+        "please just stand up and walk around"
     ]
 
     // MARK: - End of Day Summary (10 PM)
@@ -60,10 +65,11 @@ struct NotificationCopy {
 
     // MARK: - Helpers
 
-    static func randomOverLimit(name: String) -> (title: String, body: String) {
-        let title = overLimitTitles.randomElement()!
-        let body = overLimitBodies.randomElement()!.replacingOccurrences(of: "{name}", with: name)
-        return (title, body)
+    static func randomOverLimit(name: String, time: String, limit: String) -> (title: String, body: String) {
+        var body = overLimitBodies.randomElement()!
+        body = body.replacingOccurrences(of: "{time}", with: time)
+        body = body.replacingOccurrences(of: "{limit}", with: limit)
+        return (title: name, body: body)
     }
 
     static func randomEndOfDay(name: String, time: String) -> (title: String, body: String) {
