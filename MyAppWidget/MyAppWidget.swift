@@ -90,7 +90,7 @@ private struct WidgetMemberRow: View {
                 .font(.system(size: isTop ? 16 : 14, weight: isTop ? .semibold : .regular))
                 .foregroundStyle(isTop ? Color.white : Color.white.opacity(0.7))
                 .lineLimit(1)
-                .minimumScaleFactor(0.4)
+                .minimumScaleFactor(0.7)
                 .layoutPriority(1)
 
             Spacer(minLength: 0)
@@ -218,10 +218,8 @@ struct MyAppWidgetEntryView: View {
                                     .frame(height: 1)
                             }
                         }
-                        Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 20)
-                    .padding(.top, 14)
                     .frame(width: geo.size.width, height: geo.size.height)
                 }
 
