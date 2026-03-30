@@ -63,7 +63,27 @@ struct NotificationCopy {
         "we saw what you were doing last night"
     ]
 
-    // MARK: - Helpers
+    // MARK: - Weekly Roast
+
+    static let weeklyRoastBodies = [
+        "was on their phone over 6 hours for all 7 days of the week",
+        "averaged {time} a day this week thats basically a full time job",
+        "spent {weeklyHours} hours on their phone this week",
+        "spent more time on their phone this week than most people work",
+        "weekly screen time report just came in and its not looking good",
+        "put up career numbers this week",
+        "and their phone had a very busy week",
+        "this is an all time performance",
+        "if scrolling was homework you would have straight As",
+        "we checked the weekly numbers twice hoping it was wrong",
+        "the weekly screen time graph is going the wrong direction",
+        "at this rate the phone is going to file taxes for you",
+        "you are averaging more phone than sleep",
+        "this week was a big win for your phone",
+        "tough week statistically"
+    ]
+
+    // MARK: - Generators (Title = Name)
 
     static func randomOverLimit(name: String, time: String, limit: String) -> (title: String, body: String) {
         var body = overLimitBodies.randomElement()!
@@ -83,6 +103,15 @@ struct NotificationCopy {
         body = body.replacingOccurrences(of: "{time}", with: time)
         return (title: name, body: body)
     }
+
+    static func randomWeeklyRoast(name: String, time: String, weeklyHours: String) -> (title: String, body: String) {
+        var body = weeklyRoastBodies.randomElement()!
+        body = body.replacingOccurrences(of: "{time}", with: time)
+        body = body.replacingOccurrences(of: "{weeklyHours}", with: weeklyHours)
+        return (title: name, body: body)
+    }
+
+    // MARK: - Time Formatting
 
     // Format minutes into a readable string like "1h 30min" or "45min"
     static func formatTime(_ minutes: Int) -> String {
