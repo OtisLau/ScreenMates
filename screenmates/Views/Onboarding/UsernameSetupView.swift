@@ -72,7 +72,9 @@ struct UsernameSetupView: View {
                 } label: {
                     HStack(spacing: 8) {
                         if isLoading {
-                            ProgressView()
+                            SpinnerIcon()
+                            Text("Saving…")
+                                .fontWeight(.semibold)
                         } else {
                             Text("Continue")
                                 .fontWeight(.semibold)

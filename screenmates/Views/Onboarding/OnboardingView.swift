@@ -21,6 +21,8 @@ struct OnboardingView: View {
     @State private var permissionGranted = false
     @State private var notificationGranted = false
     @State private var isStartingMonitoring = false
+    @State private var isRequestingPermission = false
+    @State private var isRequestingNotifications = false
     @State private var showAuthError = false
     @State private var authErrorMessage = ""
 
@@ -60,6 +62,7 @@ struct OnboardingView: View {
                         subtitle: "Required to track daily usage",
                         icon: "lock.shield.fill",
                         done: permissionGranted,
+                        isLoading: isRequestingPermission,
                         action: requestPermissions
                     )
 
@@ -69,6 +72,7 @@ struct OnboardingView: View {
                         subtitle: "Get notified about your group's screen time",
                         icon: "bell.badge.fill",
                         done: notificationGranted,
+                        isLoading: isRequestingNotifications,
                         action: requestNotifications
                     )
 
@@ -78,7 +82,9 @@ struct OnboardingView: View {
                     } label: {
                         HStack(spacing: 8) {
                             if isStartingMonitoring {
-                                ProgressView()
+                                SpinnerIcon()
+                                Text("Getting Started…")
+                                    .fontWeight(.semibold)
                             } else {
                                 Text("Get Started")
                                     .fontWeight(.semibold)
@@ -117,6 +123,7 @@ struct OnboardingView: View {
         subtitle: String,
         icon: String,
         done: Bool,
+        isLoading: Bool,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -126,9 +133,13 @@ struct OnboardingView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.primary.opacity(0.08))
                         .frame(width: 36, height: 36)
-                    Image(systemName: done ? "checkmark" : icon)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Color.primary.opacity(0.7))
+                    if isLoading {
+                        SpinnerIcon()
+                    } else {
+                        Image(systemName: done ? "checkmark" : icon)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color.primary.opacity(0.7))
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -143,21 +154,26 @@ struct OnboardingView: View {
 
                 Spacer()
 
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                if !isLoading {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
             .padding(16)
             .glassCard(cornerRadius: AppTheme.cornerRadiusLarge)
         }
         .buttonStyle(.plain)
+        .disabled(isLoading || done)
     }
 
     private func requestNotifications() {
+        isRequestingNotifications = true
         Task {
             let granted = await NotificationManager.shared.requestPermission()
             await MainActor.run {
                 notificationGranted = granted
+                isRequestingNotifications = false
                 if granted {
                     UserDefaults.standard.set(true, forKey: "notificationsEnabled")
                 }
@@ -166,16 +182,23 @@ struct OnboardingView: View {
     }
 
     private func requestPermissions() {
+        isRequestingPermission = true
         Task {
             do {
                 try await center.requestAuthorization(for: .individual)
-                permissionGranted = true
-            } catch {
-                if center.authorizationStatus == .approved {
+                await MainActor.run {
                     permissionGranted = true
-                } else {
-                    authErrorMessage = "Screen Time authorization failed: \(error.localizedDescription)\n\nIf you previously granted access, try force-quitting and reopening the app."
-                    showAuthError = true
+                    isRequestingPermission = false
+                }
+            } catch {
+                await MainActor.run {
+                    isRequestingPermission = false
+                    if center.authorizationStatus == .approved {
+                        permissionGranted = true
+                    } else {
+                        authErrorMessage = "Screen Time authorization failed: \(error.localizedDescription)\n\nIf you previously granted access, try force-quitting and reopening the app."
+                        showAuthError = true
+                    }
                 }
             }
         }
@@ -184,6 +207,7 @@ struct OnboardingView: View {
     private func startMonitoring() {
         isStartingMonitoring = true
 
+        Task { @MainActor in
         let deviceActivityCenter = DeviceActivityCenter()
         let schedule = DeviceActivitySchedule(
             intervalStart: DateComponents(hour: 0, minute: 0),
@@ -246,5 +270,6 @@ struct OnboardingView: View {
             print("Error starting monitoring: \(error)")
             isStartingMonitoring = false
         }
+        } // end Task
     }
 }

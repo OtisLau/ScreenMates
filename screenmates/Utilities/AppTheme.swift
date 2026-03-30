@@ -64,6 +64,24 @@ struct AppBackground: View {
 // Keep old name as alias so existing call sites still work
 typealias DotGridBackground = AppBackground
 
+// MARK: - Loading Spinner
+// A rotating SF Symbol that works across all iOS versions and is always
+// visually distinct regardless of button style or color scheme.
+struct SpinnerIcon: View {
+    @State private var isAnimating = false
+
+    var body: some View {
+        Image(systemName: "arrow.trianglehead.2.clockwise")
+            .font(.system(size: 14, weight: .semibold))
+            .rotationEffect(.degrees(isAnimating ? 360 : 0))
+            .animation(
+                .linear(duration: 0.9).repeatForever(autoreverses: false),
+                value: isAnimating
+            )
+            .onAppear { isAnimating = true }
+    }
+}
+
 // MARK: - Glass card modifier
 // Applies the system Liquid Glass effect with a rounded rect shape.
 // Use this on cards and row backgrounds instead of hand-rolled surface colors.
