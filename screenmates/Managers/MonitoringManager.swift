@@ -144,8 +144,12 @@ class MonitoringManager {
         let center = DeviceActivityCenter()
         center.stopMonitoring()
 
-        // Stamp when monitoring was last started (debug visibility).
+        // Stamp when monitoring was last started and snapshot the current block count
+        // so the extension can rate-limit catch-up thresholds that fire immediately
+        // after restart (iOS replays all thresholds up to today's accumulated activity).
         sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
+        sharedDefaults?.set(sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0,
+                            forKey: "BlocksAtMonitoringSetup")
 
         do {
             try center.startMonitoring(DeviceActivityName("dailyTracking"), during: schedule, events: events)

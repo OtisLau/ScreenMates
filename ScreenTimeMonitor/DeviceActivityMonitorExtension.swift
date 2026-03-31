@@ -94,6 +94,24 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
         currentBlocks = min(currentBlocks, maxTrackableBlocksPerDay)
 
+        // 2a. Post-restart rate limit
+        // When monitoring restarts mid-day, iOS can immediately replay every threshold
+        // up to today's accumulated device activity. Each fires with delta=1 so the
+        // per-jump clamping above doesn't catch it. Cap growth to real elapsed time
+        // since the restart so catch-up replays can't inflate the count.
+        if let setupDate = sharedDefaults.object(forKey: monitoringSetupKey) as? Date {
+            let setupAge = now.timeIntervalSince(setupDate)
+            if setupAge >= 0 && setupAge <= recentSetupClampWindow {
+                let blocksAtSetup = sharedDefaults.integer(forKey: "BlocksAtMonitoringSetup")
+                let maxBlocksSinceRestart = Int(setupAge / Double(max(blockSizeMinutes, 1) * 60)) + deltaJitterAllowance
+                let ceiling = blocksAtSetup + maxBlocksSinceRestart
+                if currentBlocks > ceiling {
+                    print(" Post-restart rate limit: capped \(currentBlocks) to \(ceiling) (setup \(Int(setupAge))s ago, baseline \(blocksAtSetup))")
+                    currentBlocks = ceiling
+                }
+            }
+        }
+
         // 2b. Track post-midnight usage (12AM–4AM) for doom scroll notifications
         let hour = Calendar.current.component(.hour, from: now)
         if hour < 4 {
