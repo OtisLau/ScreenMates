@@ -45,15 +45,6 @@ class MonitoringManager {
                 selection.webDomainTokens.count)
     }
 
-    // Encode and persist the FamilyActivitySelection so we can restart monitoring later
-    // without going through onboarding again.
-    func saveSelection(_ selection: FamilyActivitySelection) {
-        if let encoded = try? JSONEncoder().encode(selection) {
-            defaults.set(encoded, forKey: selectionKey)
-            print(" Activity selection saved")
-        }
-    }
-
     // Re-register monitoring with a completely fresh batch of events starting from block_1.
     // Always wipes the threshold index so there is no stale data that could produce a
     // huge delta if iOS replays or delivers out-of-order callbacks.
