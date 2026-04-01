@@ -268,8 +268,47 @@ class CloudKitManager: ObservableObject {
 
     // MARK: - Profile Updates
 
+    // Fetch-or-create the user's CloudKit record, apply current fields, and save.
+    // Retries once on conflict by re-fetching the server version.
+    private func saveProfileToCloud(blocks: Int? = nil) async throws {
+        let currentBlocks = blocks ?? (sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0)
+        let postMidnightBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.postMidnightBlocksUsed) ?? 0
+
+        let record: CKRecord
+        do {
+            record = try await database.record(for: myUserProfileRecordID)
+        } catch let error as CKError where error.code == .unknownItem {
+            record = CKRecord(recordType: "UserProfile", recordID: myUserProfileRecordID)
+        }
+
+        record["user_id"] = myID
+        record["display_name"] = myDisplayName
+        record["group_id"] = myGroupID
+        record["blocks_used"] = currentBlocks
+        record["post_midnight_blocks"] = postMidnightBlocks
+        record["last_updated"] = Date()
+        record["last_active_date"] = Date()
+
+        do {
+            _ = try await database.save(record)
+        } catch let error as CKError where error.code == .serverRecordChanged {
+            // Conflict — re-fetch and retry once
+            let latest = try await database.record(for: myUserProfileRecordID)
+            latest["user_id"] = myID
+            latest["display_name"] = myDisplayName
+            latest["group_id"] = myGroupID
+            latest["blocks_used"] = currentBlocks
+            latest["post_midnight_blocks"] = postMidnightBlocks
+            latest["last_updated"] = Date()
+            latest["last_active_date"] = Date()
+            _ = try await database.save(latest)
+        }
+
+        await MainActor.run { lastSyncTime = Date() }
+        print(" Profile saved: \(currentBlocks) blocks")
+    }
+
     // Save this user's current screen time to CloudKit so their group can see it.
-    // Uses a stable record ID (same as userID) so we never create duplicate records.
     func updateMyProfile(completion: (() -> Void)? = nil) {
         mirrorIdentityToAppGroup()
 
@@ -279,72 +318,11 @@ class CloudKitManager: ObservableObject {
             return
         }
 
-        let currentBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
-        let postMidnightBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.postMidnightBlocksUsed) ?? 0
-        print(" Uploading profile: \(myDisplayName), \(currentBlocks) blocks")
-
-        database.fetch(withRecordID: myUserProfileRecordID) { [weak self] record, error in
-            guard let self else { completion?(); return }
-            let profileRecord: CKRecord
-
-            if let record {
-                profileRecord = record
-            } else if let ckError = error as? CKError, ckError.code == .unknownItem {
-                profileRecord = CKRecord(recordType: "UserProfile", recordID: self.myUserProfileRecordID)
-            } else if let error {
-                print(" Profile fetch failed: \(error.localizedDescription)")
-                completion?()
-                return
-            } else {
-                profileRecord = CKRecord(recordType: "UserProfile", recordID: self.myUserProfileRecordID)
-            }
-
-            profileRecord["user_id"] = self.myID
-            profileRecord["display_name"] = self.myDisplayName
-            profileRecord["group_id"] = self.myGroupID
-            profileRecord["blocks_used"] = currentBlocks
-            profileRecord["post_midnight_blocks"] = postMidnightBlocks
-            profileRecord["last_updated"] = Date()
-            profileRecord["last_active_date"] = Date()
-
-            self.saveProfileWithRetry(profileRecord, attemptsRemaining: 2, completion: completion)
-        }
-    }
-
-    // Try to save a profile record, retrying once if there's a write conflict.
-    // Conflicts happen when the app and extension both try to save at the same time.
-    private func saveProfileWithRetry(_ record: CKRecord, attemptsRemaining: Int, completion: (() -> Void)?) {
-        database.save(record) { [weak self] _, error in
-            guard let self else { completion?(); return }
-            if let error = error as? CKError {
-                let isRetryable = [.serverRecordChanged, .zoneBusy, .serviceUnavailable, .requestRateLimited].contains(error.code)
-                if isRetryable && attemptsRemaining > 0 {
-                    let retryAfter = (error.userInfo[CKErrorRetryAfterKey] as? Double) ?? 0.5
-                    print(" Save conflict — retrying in \(retryAfter)s")
-                    DispatchQueue.global().asyncAfter(deadline: .now() + retryAfter) { [weak self] in
-                        guard let self else { completion?(); return }
-                        // Re-fetch the latest version from the server then re-apply our fields
-                        self.database.fetch(withRecordID: self.myUserProfileRecordID) { [weak self] fetched, _ in
-                            guard let self else { completion?(); return }
-                            let toSave = fetched ?? record
-                            toSave["user_id"] = self.myID
-                            toSave["display_name"] = self.myDisplayName
-                            toSave["group_id"] = self.myGroupID
-                            toSave["blocks_used"] = self.sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
-                            toSave["post_midnight_blocks"] = self.sharedDefaults?.integer(forKey: AppConstants.Keys.postMidnightBlocksUsed) ?? 0
-                            toSave["last_updated"] = Date()
-                            toSave["last_active_date"] = Date()
-                            self.saveProfileWithRetry(toSave, attemptsRemaining: attemptsRemaining - 1, completion: completion)
-                        }
-                    }
-                    return
-                }
+        Task {
+            do {
+                try await saveProfileToCloud()
+            } catch {
                 print(" Profile save failed: \(error.localizedDescription)")
-            } else if let error {
-                print(" Profile save failed: \(error.localizedDescription)")
-            } else {
-                print(" Profile saved")
-                DispatchQueue.main.async { [weak self] in self?.lastSyncTime = Date() }
             }
             completion?()
         }
@@ -517,7 +495,6 @@ class CloudKitManager: ObservableObject {
     // MARK: - Background Sync
 
     // Called by the 15-minute background task while the app is closed.
-    // Uploads the latest block count so friends' widgets stay fresh.
     func performBackgroundCheckDetailed() async -> (success: Bool, errorMessage: String?, ckErrorCode: Int?, retryAfterSeconds: Double?) {
         guard !myDisplayName.isEmpty else {
             return (false, "Display name not set", nil, nil)
@@ -536,27 +513,8 @@ class CloudKitManager: ObservableObject {
             return (false, "iCloud status check failed: \(error.localizedDescription)", nil, nil)
         }
 
-        let currentBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
-
         do {
-            let record: CKRecord
-            do {
-                record = try await database.record(for: myUserProfileRecordID)
-            } catch let error as CKError where error.code == .unknownItem {
-                record = CKRecord(recordType: "UserProfile", recordID: myUserProfileRecordID)
-            }
-
-            let postMidnightBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.postMidnightBlocksUsed) ?? 0
-            record["user_id"] = myID
-            record["display_name"] = myDisplayName
-            record["group_id"] = myGroupID
-            record["blocks_used"] = currentBlocks
-            record["post_midnight_blocks"] = postMidnightBlocks
-            record["last_updated"] = Date()
-            record["last_active_date"] = Date()
-
-            try await database.save(record)
-            print(" Background sync: \(currentBlocks) blocks uploaded")
+            try await saveProfileToCloud()
             return (true, nil, nil, nil)
         } catch {
             let retryAfter = (error as? CKError)?.userInfo[CKErrorRetryAfterKey] as? Double
@@ -638,46 +596,23 @@ class CloudKitManager: ObservableObject {
     }
 
     // Zero out this user's block count locally and push 0 to CloudKit immediately.
-    // Useful in debug mode to wipe stale data before a fresh test run.
     func resetMyCountToZero(completion: (() -> Void)? = nil) {
-        // Zero both the display counter and the threshold index.
-        // Resetting LastThresholdIndex means the next threshold callback will be treated as new.
-        // In this build, includesPastActivity is disabled, so setup/restarts don't backfill old usage.
         sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
         print(" Reset local block count to 0 — uploading to CloudKit...")
 
-        // Push 0 blocks to CloudKit right now so friends see the reset instantly
-        database.fetch(withRecordID: myUserProfileRecordID) { [weak self] record, error in
-            guard let self else { completion?(); return }
-            let profileRecord: CKRecord
-            if let record {
-                profileRecord = record
-            } else {
-                profileRecord = CKRecord(recordType: "UserProfile", recordID: self.myUserProfileRecordID)
-            }
-
-            profileRecord["user_id"]          = self.myID
-            profileRecord["display_name"]     = self.myDisplayName
-            profileRecord["group_id"]         = self.myGroupID
-            profileRecord["blocks_used"]      = 0
-            profileRecord["last_updated"]     = Date()
-            profileRecord["last_active_date"] = Date()
-
-            self.database.save(profileRecord) { [weak self] _, saveError in
-                guard let self else { completion?(); return }
-                if let saveError {
-                    print(" Reset upload failed: \(saveError.localizedDescription)")
-                    DispatchQueue.main.async { completion?() }
-                    return
-                }
+        Task {
+            do {
+                try await saveProfileToCloud(blocks: 0)
                 print(" Reset uploaded to CloudKit")
-                Task { @MainActor [weak self] in
-                    await self?.refreshGroupNow(reason: "reset")
-                    completion?()
+                await MainActor.run { [weak self] in
+                    Task { await self?.refreshGroupNow(reason: "reset") }
                 }
+            } catch {
+                print(" Reset upload failed: \(error.localizedDescription)")
             }
+            completion?()
         }
     }
 
