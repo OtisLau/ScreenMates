@@ -21,10 +21,6 @@ struct DebugMenuView: View {
         monitoringActive = activities.contains(DeviceActivityName("dailyTracking"))
     }
 
-    // Last time the extension detected a screen time threshold
-    private var lastThresholdDate: Date? {
-        sharedDefaults?.object(forKey: "LastExtensionThresholdDate") as? Date
-    }
     private var lastThresholdEvent: String? {
         sharedDefaults?.string(forKey: "LastExtensionThresholdEvent")
     }
@@ -184,7 +180,7 @@ struct DebugMenuView: View {
                     }
 
                     // Did the extension detect screen time?
-                    if let d = lastThresholdDate {
+                    if let d = lastExtensionWakeDate {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text("Extension threshold")

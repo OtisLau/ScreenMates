@@ -26,9 +26,6 @@ class MonitoringManager {
         sharedDefaults.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
         sharedDefaults.set(now, forKey: AppConstants.Keys.lastBlockDate)
 
-        // Clear stale threshold date so delta clamping uses today's reference,
-        // not yesterday's — prevents over-counting on the first threshold after midnight.
-        sharedDefaults.removeObject(forKey: "LastExtensionThresholdDate")
 
         return true
     }

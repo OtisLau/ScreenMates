@@ -6,110 +6,65 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     let suiteName = "group.com.otishlau.screenmates"
     private let monitoringSetupKey = "MonitoringSetupTimestamp"
-    private let lastThresholdDateKey = "LastExtensionThresholdDate"
     private let lastThresholdIndexKey = "LastThresholdIndex"
-    private let deltaClampDebugRawKey = "LastThresholdRawDelta"
-    private let deltaClampDebugAppliedKey = "LastThresholdAppliedDelta"
-    private let deltaClampDebugDateKey = "LastThresholdDeltaClampedDate"
-    private let deltaClampDebugReasonKey = "LastThresholdDeltaClampedReason"
-    private let deltaClampDebugRangeKey = "LastThresholdDeltaClampedRange"
-    private let recentSetupClampWindow: TimeInterval = 20 * 60
-    private let deltaJitterAllowance = 2
 
-    // Single shared defaults instance — avoids re-allocating UserDefaults on every property access.
     private lazy var sharedDefaults: UserDefaults? = UserDefaults(suiteName: suiteName)
-
-    // Hard cap of trackable thresholds in a day derived from block size only.
-    private var maxTrackableBlocksPerDay: Int {
-        let bs = sharedDefaults?.integer(forKey: "SharedBlockSizeMinutes") ?? 0
-        let blockSize = bs > 0 ? bs : 15
-        let maxThresholdMinuteOfDay = (24 * 60) - 1
-        let dailyCap = (maxThresholdMinuteOfDay + blockSize - 1) / blockSize
-        return max(dailyCap, 1)
-    }
 
     private var blockSizeMinutes: Int {
         let bs = sharedDefaults?.integer(forKey: "SharedBlockSizeMinutes") ?? 0
         return bs > 0 ? bs : 15
     }
 
+    private var maxTrackableBlocksPerDay: Int {
+        let blockSize = blockSizeMinutes
+        return max(((24 * 60) - 1 + blockSize - 1) / blockSize, 1)
+    }
+
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
 
         guard let sharedDefaults else {
-            print(" App Group UserDefaults unavailable for suite '\(suiteName)'")
+            print("App Group UserDefaults unavailable for suite '\(suiteName)'")
             return
         }
 
-        // Early wake marker — written before any guard/return so the debug menu can confirm
-        // the extension process was actually launched by iOS, independent of all downstream logic.
         sharedDefaults.set(Date(), forKey: "LastExtensionWakeDate")
         sharedDefaults.set(event.rawValue, forKey: "LastExtensionWakeEvent")
 
-        // 1. Check for stale (yesterday's) event
-        // If this threshold belongs to a previous day's schedule, ignore it entirely.
-        // The app will detect the new day on next foreground/background wake and call
-        // restartMonitoring(), which resets counters and registers a fresh schedule.
-        // Processing a stale event here would race with the app's reset and can cause
-        // huge delta jumps (e.g. block_21 - 0 = 21 blocks added instantly).
+        // Ignore events from yesterday's schedule — app will restart monitoring on next wake.
         let lastDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? .distantPast
-        if !Calendar.current.isDateInToday(lastDate) {
-            print(" Ignoring stale threshold from previous day's schedule — waiting for app restart")
+        guard Calendar.current.isDateInToday(lastDate) else {
+            print("Ignoring stale threshold from previous day's schedule")
             return
         }
 
-        // 2. Update the block count
-        // Use LastThresholdIndex to dedupe callbacks and to recover skipped thresholds.
-        // If iOS delivers block_137 after block_96 (or after a day reset), add the delta
-        // rather than just +1 so local blocks stay aligned with real usage.
         let now = Date()
         let thresholdIndex = parseThresholdIndex(from: event.rawValue) ?? 0
         let lastIndex = sharedDefaults.integer(forKey: lastThresholdIndexKey)
 
+        // Deduplicate: ignore duplicate or out-of-order callbacks.
+        guard thresholdIndex > lastIndex else { return }
+        sharedDefaults.set(thresholdIndex, forKey: lastThresholdIndexKey)
+
+        let delta = thresholdIndex - lastIndex
         let previousBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
-        var currentBlocks = previousBlocks
-        if thresholdIndex > 0 {
-            if thresholdIndex > lastIndex {
-                // Always advance the index so future deduplication works correctly.
-                sharedDefaults.set(thresholdIndex, forKey: lastThresholdIndexKey)
-                let rawDelta = thresholdIndex - lastIndex
-                let delta = appliedDeltaForThresholdJump(
-                    rawDelta: rawDelta,
-                    lastIndex: lastIndex,
-                    thresholdIndex: thresholdIndex,
-                    now: now,
-                    sharedDefaults: sharedDefaults
-                )
-                currentBlocks += delta
-            } else {
-                // Duplicate / out-of-order callback — ignore
-                return
-            }
-        } else {
-            currentBlocks += 1
-        }
+        var currentBlocks = min(previousBlocks + delta, maxTrackableBlocksPerDay)
 
-        currentBlocks = min(currentBlocks, maxTrackableBlocksPerDay)
-
-        // 2a. Post-restart rate limit
-        // When monitoring restarts mid-day, iOS can immediately replay every threshold
-        // up to today's accumulated device activity. Each fires with delta=1 so the
-        // per-jump clamping above doesn't catch it. Cap growth to real elapsed time
-        // since the restart so catch-up replays can't inflate the count.
+        // Post-restart rate limit: cap growth to real elapsed time in the 20 min after a
+        // restart, so iOS catch-up replays (delta=1 each) can't inflate the count.
         if let setupDate = sharedDefaults.object(forKey: monitoringSetupKey) as? Date {
             let setupAge = now.timeIntervalSince(setupDate)
-            if setupAge >= 0 && setupAge <= recentSetupClampWindow {
+            if setupAge >= 0 && setupAge <= 20 * 60 {
                 let blocksAtSetup = sharedDefaults.integer(forKey: "BlocksAtMonitoringSetup")
-                let maxBlocksSinceRestart = Int(setupAge / Double(max(blockSizeMinutes, 1) * 60)) + deltaJitterAllowance
-                let ceiling = blocksAtSetup + maxBlocksSinceRestart
+                let ceiling = blocksAtSetup + Int(setupAge / Double(blockSizeMinutes * 60)) + 2
                 if currentBlocks > ceiling {
-                    print(" Post-restart rate limit: capped \(currentBlocks) to \(ceiling) (setup \(Int(setupAge))s ago, baseline \(blocksAtSetup))")
+                    print("Post-restart rate limit: capped \(currentBlocks) to \(ceiling)")
                     currentBlocks = ceiling
                 }
             }
         }
 
-        // 2b. Track post-midnight usage (12AM–4AM) for doom scroll notifications
+        // Track post-midnight usage (12AM–4AM) for notifications.
         let hour = Calendar.current.component(.hour, from: now)
         if hour < 4 {
             let actualDelta = currentBlocks - previousBlocks
@@ -119,26 +74,17 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             }
         }
 
-        // 3. Persist
         sharedDefaults.set(currentBlocks, forKey: "DailyBlocksUsed")
         sharedDefaults.set(now, forKey: "LastBlockDate")
-        sharedDefaults.set(now, forKey: lastThresholdDateKey)
         sharedDefaults.set(event.rawValue, forKey: "LastExtensionThresholdEvent")
         sharedDefaults.set(currentBlocks, forKey: "LastExtensionBlocksAtThreshold")
 
-        print(" Threshold hit. Daily total: \(currentBlocks) blocks")
+        print("Threshold hit. Daily total: \(currentBlocks) blocks")
 
-        // 4. Update the current user's entry in the widget cache so the widget shows
-        //    fresh data for the local user without waiting for a CloudKit round-trip.
         updateWidgetCache(sharedDefaults: sharedDefaults, currentBlocks: currentBlocks)
-
-        // CloudKit upload is handled exclusively by the main app (every 60s refresh).
-        // Removing the extension's independent upload eliminates races where the app and
-        // extension push different block counts at different times.
     }
 
-    // Minimal struct that matches the JSON schema of MemberData / CachedMember so the
-    // extension can update the leaderboard cache without importing the main app target.
+    // Minimal struct matching the JSON schema of CachedMember in the main app.
     private struct CachedMember: Codable {
         let id: String
         let userID: String
@@ -149,17 +95,10 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     }
 
     // Updates the current user's row in the leaderboard cache.
-    // The extension only writes to the cache — it does NOT call reloadAllTimelines().
-    // Calling reloadAllTimelines() from the extension can race with the main app's own
-    // reloadTimelines() calls (triggered by the 30s dashboard timer and CloudKit pushes),
-    // spawning two concurrent widget processes that together exceed the widget memory limit.
-    //
-    // The widget picks up the updated cache via:
-    //   1. The main app's reloadTimelines(ofKind:) on every 30s refresh / CloudKit push
-    //   2. The widget's own 15-minute self-refresh policy
+    // The extension only writes — it does NOT call reloadAllTimelines() to avoid OOM races.
     private func updateWidgetCache(sharedDefaults: UserDefaults, currentBlocks: Int) {
         guard
-            let userID      = sharedDefaults.string(forKey: "SharedMyUserID"),   !userID.isEmpty,
+            let userID      = sharedDefaults.string(forKey: "SharedMyUserID"), !userID.isEmpty,
             let displayName = sharedDefaults.string(forKey: "SharedMyDisplayName"), !displayName.isEmpty
         else { return }
 
@@ -170,7 +109,6 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             members = decoded
         }
 
-        // Find the current user's row and update it; add a new row if not present yet.
         if let idx = members.firstIndex(where: { $0.userID == userID }) {
             members[idx] = CachedMember(id: userID, userID: userID,
                                         displayName: displayName,
@@ -188,107 +126,6 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     private func parseThresholdIndex(from raw: String) -> Int? {
         guard raw.hasPrefix("block_") else { return nil }
-        let suffix = raw.dropFirst("block_".count)
-        return Int(suffix)
+        return Int(raw.dropFirst("block_".count))
     }
-
-    // Keeps large threshold jumps plausible: if iOS wakes us with a far-future block index
-    // (e.g. block_96 right after setup or after a monitoring restart), cap the recovered
-    // delta by how much time has actually elapsed since the reference event.
-    //
-    // Two clamping windows:
-    //   1. "recent-setup": within 20 min of startMonitoring — guards against iOS replaying
-    //      pre-setup activity despite includesPastActivity=false.
-    //   2. "last-threshold": always active when lastIndex == 0 and a last-threshold date is
-    //      recorded — guards against a monitoring restart resetting lastIndex to 0 while iOS
-    //      immediately fires a high block number (which would add the full index as delta).
-    //      After the first real threshold fires post-restart this case no longer triggers.
-    private func appliedDeltaForThresholdJump(
-        rawDelta: Int,
-        lastIndex: Int,
-        thresholdIndex: Int,
-        now: Date,
-        sharedDefaults: UserDefaults
-    ) -> Int {
-        guard rawDelta > 1 else { return max(rawDelta, 0) }
-
-        let secondsPerBlock = TimeInterval(max(blockSizeMinutes, 1) * 60)
-        guard secondsPerBlock > 0 else { return rawDelta }
-
-        // Window 1: clamp during the first 20 min after monitoring was set up.
-        if let setupDate = sharedDefaults.object(forKey: monitoringSetupKey) as? Date {
-            let setupAge = now.timeIntervalSince(setupDate)
-            if setupAge >= 0 && setupAge <= recentSetupClampWindow {
-                return clampDeltaIfNeeded(
-                    rawDelta: rawDelta,
-                    lastIndex: lastIndex,
-                    thresholdIndex: thresholdIndex,
-                    reason: "recent-setup",
-                    referenceDate: setupDate,
-                    secondsPerBlock: secondsPerBlock,
-                    now: now,
-                    sharedDefaults: sharedDefaults
-                )
-            }
-        }
-
-        // Window 2: if a prior threshold date exists, use it as the time reference to cap
-        // how many blocks can plausibly have elapsed since then.  This catches large jumps
-        // at any point in the day — not just when lastIndex == 0 — so a delayed iOS
-        // catch-up callback (e.g. block_96 arriving after block_5) can't add 91 blocks
-        // in one shot and peg usage at 24 hours.
-        if let lastThresholdDate = sharedDefaults.object(forKey: lastThresholdDateKey) as? Date {
-            return clampDeltaIfNeeded(
-                rawDelta: rawDelta,
-                lastIndex: lastIndex,
-                thresholdIndex: thresholdIndex,
-                reason: "last-threshold",
-                referenceDate: lastThresholdDate,
-                secondsPerBlock: secondsPerBlock,
-                now: now,
-                sharedDefaults: sharedDefaults
-            )
-        }
-
-        // No prior threshold date (cleared by day rollover or fresh install).
-        // This is the first threshold of the day — cap delta at 1 to prevent
-        // iOS firing a high block index and over-counting on a clean slate.
-        if lastIndex == 0 && rawDelta > 1 {
-            sharedDefaults.set(rawDelta, forKey: deltaClampDebugRawKey)
-            sharedDefaults.set(1, forKey: deltaClampDebugAppliedKey)
-            sharedDefaults.set(now, forKey: deltaClampDebugDateKey)
-            sharedDefaults.set("first-of-day", forKey: deltaClampDebugReasonKey)
-            sharedDefaults.set("block_0->block_\(thresholdIndex)", forKey: deltaClampDebugRangeKey)
-            print(" Clamped first-of-day delta \(rawDelta) to 1")
-            return 1
-        }
-
-        return rawDelta
-    }
-
-    private func clampDeltaIfNeeded(
-        rawDelta: Int,
-        lastIndex: Int,
-        thresholdIndex: Int,
-        reason: String,
-        referenceDate: Date,
-        secondsPerBlock: TimeInterval,
-        now: Date,
-        sharedDefaults: UserDefaults
-    ) -> Int {
-        let elapsed = max(0, now.timeIntervalSince(referenceDate))
-        let plausibleSteps = Int(elapsed / secondsPerBlock)
-        let maxPlausibleDelta = max(1, plausibleSteps + deltaJitterAllowance)
-        guard rawDelta > maxPlausibleDelta else { return rawDelta }
-
-        sharedDefaults.set(rawDelta, forKey: deltaClampDebugRawKey)
-        sharedDefaults.set(maxPlausibleDelta, forKey: deltaClampDebugAppliedKey)
-        sharedDefaults.set(now, forKey: deltaClampDebugDateKey)
-        sharedDefaults.set(reason, forKey: deltaClampDebugReasonKey)
-        sharedDefaults.set("block_\(lastIndex)->block_\(thresholdIndex)", forKey: deltaClampDebugRangeKey)
-        print(" Clamped threshold delta \(rawDelta) to \(maxPlausibleDelta) [\(reason)]")
-
-        return maxPlausibleDelta
-    }
-
 }
