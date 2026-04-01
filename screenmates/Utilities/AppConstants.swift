@@ -73,8 +73,7 @@ struct AppConstants {
         static let dailyBlocksUsed      = "DailyBlocksUsed"
         static let lastBlockDate        = "LastBlockDate"
         static let cachedLeaderboardData = "CachedLeaderboardData"
-        static let lastBackgroundSync   = "LastBackgroundSync"
-        static let backgroundSyncHistory = "BackgroundSyncHistory"
+
 
         // Identity mirrored into App Group so the extension can upload to CloudKit
         static let sharedUserID       = "SharedMyUserID"
