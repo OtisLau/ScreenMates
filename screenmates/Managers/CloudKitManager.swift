@@ -395,10 +395,6 @@ class CloudKitManager: ObservableObject {
 
         let isSilentPush = reason == "silent-push"
 
-        // Ensure day rollover runs BEFORE uploading profile — otherwise we push
-        // yesterday's stale block count to CloudKit right after midnight.
-        MonitoringManager.shared.performHardDayRolloverResetIfNeeded()
-
         if !isSilentPush {
             await withCheckedContinuation { cont in
                 updateMyProfile { cont.resume() }
