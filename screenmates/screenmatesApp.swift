@@ -57,9 +57,19 @@ struct ScreenMatesApp: App {
         }
     }
     
+    // Debounce concurrent calls (e.g. background task + foreground activation).
+    private static var lastRestartDate: Date = .distantPast
+
     // Check that DeviceActivity monitoring is running and the current batch isn't
     // exhausted. Called on every foreground activation and background task wake.
     private func ensureMonitoringActive(context: String) {
+        // Skip if we already restarted within the last 5 seconds to prevent
+        // concurrent foreground + background calls from double-restarting.
+        guard Date().timeIntervalSince(Self.lastRestartDate) > 5 else {
+            print(" Skipping ensureMonitoringActive (\(context)) — restart still settling")
+            return
+        }
+
         let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
 
         // New-day check: restart monitoring before anything else if we're on a new day.
@@ -69,6 +79,7 @@ struct ScreenMatesApp: App {
         let lastBlockDate = sharedDefaults?.object(forKey: AppConstants.Keys.lastBlockDate) as? Date ?? .distantPast
         if !Calendar.current.isDateInToday(lastBlockDate) {
             print(" New day detected (\(context)) — rolling over and restarting monitoring")
+            Self.lastRestartDate = Date()
             MonitoringManager.shared.restartMonitoring()
             return
         }
@@ -77,6 +88,7 @@ struct ScreenMatesApp: App {
 
         guard activities.contains(DeviceActivityName("dailyTracking")) else {
             print(" Monitoring dead (\(context)) — auto-restarting")
+            Self.lastRestartDate = Date()
             MonitoringManager.shared.restartMonitoring()
             return
         }
@@ -90,6 +102,7 @@ struct ScreenMatesApp: App {
         if exhaustedBatch && lastAutoRollover != lastIndex {
             print(" Batch exhausted at block_\(lastIndex) (\(context)) — rolling over")
             sharedDefaults?.set(lastIndex, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
+            Self.lastRestartDate = Date()
             MonitoringManager.shared.restartMonitoring()
         }
     }
