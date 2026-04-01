@@ -1,6 +1,6 @@
 import SwiftUI
 import FamilyControls
-import DeviceActivity
+
 
 // Button style helper for the onboarding continue button
 private struct OnboardingContinueButtonStyle: ViewModifier {
@@ -207,66 +207,12 @@ struct OnboardingView: View {
     private func startMonitoring() {
         isStartingMonitoring = true
 
+        MonitoringManager.shared.restartMonitoring()
+        cloudManager.isSetupDone = true
+        isStartingMonitoring = false
+
         Task { @MainActor in
-        let deviceActivityCenter = DeviceActivityCenter()
-        let schedule = DeviceActivitySchedule(
-            intervalStart: DateComponents(hour: 0, minute: 0),
-            intervalEnd: DateComponents(hour: 23, minute: 59),
-            repeats: true
-        )
-
-        let blockSize = AppConstants.currentBlockSize
-        var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
-        let maxMinutesInDay = AppConstants.maxThresholdMinuteOfDay
-        let checkpoints = min(AppConstants.eventsPerMonitoringBatch, AppConstants.maxTrackableBlocksPerDay)
-
-        for i in 1...checkpoints {
-            let eventName = DeviceActivityEvent.Name("block_\(i)")
-            let minutes = min(i * blockSize, maxMinutesInDay)
-            let event: DeviceActivityEvent
-            if #available(iOS 17.4, *) {
-                if AppConstants.monitorAllActivity {
-                    event = DeviceActivityEvent(
-                        threshold: DateComponents(minute: minutes),
-                        includesPastActivity: AppConstants.includesPastActivity
-                    )
-                } else {
-                    // Selection-based monitoring — saved selection may be nil on first launch,
-                    // which is fine: the all-activity fallback above handles that case.
-                    event = DeviceActivityEvent(
-                        threshold: DateComponents(minute: minutes),
-                        includesPastActivity: AppConstants.includesPastActivity
-                    )
-                }
-            } else {
-                event = DeviceActivityEvent(threshold: DateComponents(minute: minutes))
-            }
-            events[eventName] = event
+            await CloudKitManager.shared.refreshGroupNow(reason: "setup")
         }
-
-        do {
-            deviceActivityCenter.stopMonitoring()
-            let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
-            sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
-            sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
-            sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-            try deviceActivityCenter.startMonitoring(
-                DeviceActivityName("dailyTracking"),
-                during: schedule,
-                events: events
-            )
-
-
-            cloudManager.isSetupDone = true
-            isStartingMonitoring = false
-
-            Task { @MainActor in
-                await CloudKitManager.shared.refreshGroupNow(reason: "setup")
-            }
-        } catch {
-            print("Error starting monitoring: \(error)")
-            isStartingMonitoring = false
-        }
-        } // end Task
     }
 }
