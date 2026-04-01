@@ -57,12 +57,9 @@ class MonitoringManager {
         }
     }
 
-    // Re-register monitoring with a fresh batch of events starting after the last threshold
-    // that already fired. This lets testing continue after a batch is exhausted without
-    // wiping already-counted usage.
-    //
-    // e.g. if LastThresholdIndex = 96, new events are block_97…block_192 at minutes 97…192.
-    // Since your current usage is ~96 min, block_97 hasn't fired yet → extension wakes on next use.
+    // Re-register monitoring with a completely fresh batch of events starting from block_1.
+    // Always wipes the threshold index so there is no stale data that could produce a
+    // huge delta if iOS replays or delivers out-of-order callbacks.
     func restartMonitoring() {
         let selection: FamilyActivitySelection? = {
             guard let data = defaults.data(forKey: selectionKey) else { return nil }
@@ -76,11 +73,15 @@ class MonitoringManager {
 
         _ = performHardDayRolloverResetIfNeeded()
 
-        let lastIndex  = sharedDefaults?.integer(forKey: AppConstants.Keys.lastThresholdIndex) ?? 0
+        // Always reset the threshold index so the extension starts counting from block_1.
+        // DailyBlocksUsed is preserved — we only wipe the indices to prevent stale deltas.
+        sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
+        sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
+
         let blockSize  = AppConstants.currentBlockSize
         let maxMinutes = AppConstants.maxThresholdMinuteOfDay
 
-        // Build the next batch of events continuing from where we left off
+        // Build a fresh batch of events always starting from block_1
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
         let useAllActivity =
             AppConstants.monitorAllActivity ||
@@ -91,7 +92,7 @@ class MonitoringManager {
             print(" Restart monitoring using all-activity mode")
         }
         for i in 1...AppConstants.eventsPerMonitoringBatch {
-            let index   = lastIndex + i
+            let index   = i
             let minutes = index * blockSize
             guard minutes <= maxMinutes else { break }
 
@@ -153,7 +154,7 @@ class MonitoringManager {
 
         do {
             try center.startMonitoring(DeviceActivityName("dailyTracking"), during: schedule, events: events)
-            print(" Monitoring restarted from block_\(lastIndex + 1) with \(events.count) events")
+            print(" Monitoring restarted from block_1 with \(events.count) events")
         } catch {
             print(" Failed to restart monitoring: \(error)")
         }

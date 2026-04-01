@@ -1,12 +1,10 @@
 import DeviceActivity
 import ManagedSettings
 import Foundation
-import CloudKit
 
 class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     let suiteName = "group.com.otishlau.screenmates"
-    private let cloudContainerID = "iCloud.com.otishlau.screenmates"
     private let monitoringSetupKey = "MonitoringSetupTimestamp"
     private let lastThresholdDateKey = "LastExtensionThresholdDate"
     private let lastThresholdIndexKey = "LastThresholdIndex"
@@ -35,12 +33,6 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         return bs > 0 ? bs : 15
     }
 
-    // The extension can't import AppConstants from the main app, so the main app mirrors
-    // the upload throttle value into App Group storage.
-    private var uploadThrottleSeconds: TimeInterval {
-        sharedDefaults?.double(forKey: "SharedUploadThrottleSeconds").nonZero ?? (30 * 60)
-    }
-
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
 
@@ -54,12 +46,16 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         sharedDefaults.set(Date(), forKey: "LastExtensionWakeDate")
         sharedDefaults.set(event.rawValue, forKey: "LastExtensionWakeEvent")
 
-        // 1. Check for midnight reset
-        // Use .distantPast as the fallback so a fresh install (nil key) always triggers the
-        // reset on the first callback, properly zeroing both counters before counting begins.
+        // 1. Check for stale (yesterday's) event
+        // If this threshold belongs to a previous day's schedule, ignore it entirely.
+        // The app will detect the new day on next foreground/background wake and call
+        // restartMonitoring(), which resets counters and registers a fresh schedule.
+        // Processing a stale event here would race with the app's reset and can cause
+        // huge delta jumps (e.g. block_21 - 0 = 21 blocks added instantly).
         let lastDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? .distantPast
         if !Calendar.current.isDateInToday(lastDate) {
-            performHardDayRolloverReset(sharedDefaults: sharedDefaults)
+            print(" Ignoring stale threshold from previous day's schedule — waiting for app restart")
+            return
         }
 
         // 2. Update the block count
@@ -133,8 +129,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         //    fresh data for the local user without waiting for a CloudKit round-trip.
         updateWidgetCache(sharedDefaults: sharedDefaults, currentBlocks: currentBlocks)
 
-        // 5. Upload to CloudKit so friends see your updated count
-        attemptCloudUpload(currentBlocks: currentBlocks)
+        // CloudKit upload is handled exclusively by the main app (every 60s refresh).
+        // Removing the extension's independent upload eliminates races where the app and
+        // extension push different block counts at different times.
     }
 
     // Minimal struct that matches the JSON schema of MemberData / CachedMember so the
@@ -183,74 +180,6 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
         if let encoded = try? JSONEncoder().encode(members) {
             sharedDefaults.set(encoded, forKey: cacheKey)
-        }
-    }
-
-    private func attemptCloudUpload(currentBlocks: Int) {
-        guard let sharedDefaults else { return }
-
-        // Throttle uploads — gate on last *successful* upload so a failed attempt
-        // doesn't block the next threshold from retrying.
-        let now = Date()
-        let last = sharedDefaults.object(forKey: "LastExtensionCloudUpload") as? Date ?? .distantPast
-        guard now.timeIntervalSince(last) >= uploadThrottleSeconds else { return }
-        sharedDefaults.set(now, forKey: "LastExtensionCloudUploadAttempt")
-
-        // Identity is mirrored into App Group by the main app on launch / setup
-        guard
-            let userID = sharedDefaults.string(forKey: "SharedMyUserID"), !userID.isEmpty,
-            let displayName = sharedDefaults.string(forKey: "SharedMyDisplayName"), !displayName.isEmpty,
-            let groupID = sharedDefaults.string(forKey: "SharedMyGroupID"), !groupID.isEmpty
-        else {
-            sharedDefaults.set(false, forKey: "LastExtensionCloudUploadSuccess")
-            sharedDefaults.set("Skipped: missing identity in App Group (open app once after onboarding)", forKey: "LastExtensionCloudUploadError")
-            return
-        }
-
-        let container = CKContainer(identifier: cloudContainerID)
-        let database = container.publicCloudDatabase
-        let recordID = CKRecord.ID(recordName: userID)
-
-        Task {
-            do {
-                let record: CKRecord
-                do {
-                    record = try await database.record(for: recordID)
-                } catch let error as CKError where error.code == .unknownItem {
-                    record = CKRecord(recordType: "UserProfile", recordID: recordID)
-                }
-
-                let postMidnightBlocks = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
-                record["user_id"] = userID
-                record["display_name"] = displayName
-                record["group_id"] = groupID
-                record["blocks_used"] = currentBlocks
-                record["post_midnight_blocks"] = postMidnightBlocks
-                record["last_updated"] = Date()
-                record["last_active_date"] = Date()
-
-                do {
-                    _ = try await database.save(record)
-                } catch let error as CKError where error.code == .serverRecordChanged {
-                    let latest = try await database.record(for: recordID)
-                    latest["user_id"] = userID
-                    latest["display_name"] = displayName
-                    latest["group_id"] = groupID
-                    latest["blocks_used"] = currentBlocks
-                    latest["post_midnight_blocks"] = postMidnightBlocks
-                    latest["last_updated"] = Date()
-                    latest["last_active_date"] = Date()
-                    _ = try await database.save(latest)
-                }
-                sharedDefaults.set(now, forKey: "LastExtensionCloudUpload")
-                sharedDefaults.set(true, forKey: "LastExtensionCloudUploadSuccess")
-                sharedDefaults.removeObject(forKey: "LastExtensionCloudUploadError")
-                print(" Extension: uploaded \(currentBlocks) blocks to CloudKit")
-            } catch {
-                print(" Extension CloudKit upload failed: \(error.localizedDescription)")
-                sharedDefaults.set(false, forKey: "LastExtensionCloudUploadSuccess")
-                sharedDefaults.set(error.localizedDescription, forKey: "LastExtensionCloudUploadError")
-            }
         }
     }
 
@@ -359,26 +288,4 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         return maxPlausibleDelta
     }
 
-    // Keep extension-side day reset behavior aligned with the app-side reset.
-    private func performHardDayRolloverReset(sharedDefaults: UserDefaults) {
-        // Snapshot post-midnight blocks before zeroing so morning notifications can reference them
-        let postMidnight = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
-        sharedDefaults.set(postMidnight, forKey: "YesterdayPostMidnightBlocks")
-
-        sharedDefaults.set(0, forKey: "DailyBlocksUsed")
-        sharedDefaults.set(0, forKey: lastThresholdIndexKey)
-        sharedDefaults.set(0, forKey: "LastAutoBatchRolloverIndex")
-        sharedDefaults.set(0, forKey: "PostMidnightBlocksUsed")
-        sharedDefaults.set(Date(), forKey: "LastBlockDate")
-        sharedDefaults.removeObject(forKey: "LastExtensionCloudUpload")
-        sharedDefaults.removeObject(forKey: "LastExtensionCloudUploadAttempt")
-        // Clear stale threshold date so delta clamping uses today's reference,
-        // not yesterday's — prevents over-counting on the first threshold after midnight.
-        sharedDefaults.removeObject(forKey: lastThresholdDateKey)
-    }
-}
-
-// Helper so we can fall back when a stored Double is 0 (i.e. key was never set)
-private extension Double {
-    var nonZero: Double? { self == 0 ? nil : self }
 }
