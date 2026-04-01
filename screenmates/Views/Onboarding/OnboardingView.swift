@@ -250,9 +250,6 @@ struct OnboardingView: View {
             sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
             sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
             sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-            sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")
-            sharedDefaults?.removeObject(forKey: "LastExtensionCloudUploadAttempt")
-
             try deviceActivityCenter.startMonitoring(
                 DeviceActivityName("dailyTracking"),
                 during: schedule,

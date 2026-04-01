@@ -648,10 +648,6 @@ class CloudKitManager: ObservableObject {
         sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-        // Remove the upload throttle timestamps so the extension uploads on the very next threshold
-        sharedDefaults?.removeObject(forKey: "LastExtensionCloudUpload")
-        sharedDefaults?.removeObject(forKey: "LastExtensionCloudUploadAttempt")
-
         print(" Reset local block count to 0 — uploading to CloudKit...")
 
         // Push 0 blocks to CloudKit right now so friends see the reset instantly

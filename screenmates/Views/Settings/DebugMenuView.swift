@@ -21,18 +21,6 @@ struct DebugMenuView: View {
         monitoringActive = activities.contains(DeviceActivityName("dailyTracking"))
     }
 
-    // Last time the extension successfully uploaded to CloudKit
-    private var lastUploadDate: Date? {
-        sharedDefaults?.object(forKey: "LastExtensionCloudUploadAttempt") as? Date
-    }
-    private var lastUploadSucceeded: Bool? {
-        guard sharedDefaults?.object(forKey: "LastExtensionCloudUploadSuccess") != nil else { return nil }
-        return sharedDefaults?.bool(forKey: "LastExtensionCloudUploadSuccess")
-    }
-    private var lastUploadError: String? {
-        sharedDefaults?.string(forKey: "LastExtensionCloudUploadError")
-    }
-
     // Last time the extension detected a screen time threshold
     private var lastThresholdDate: Date? {
         sharedDefaults?.object(forKey: "LastExtensionThresholdDate") as? Date
@@ -214,36 +202,6 @@ struct DebugMenuView: View {
                             Spacer()
                             Text("Not yet — use a tracked app")
                                 .foregroundColor(.orange)
-                        }
-                    }
-
-                    // Did the upload reach CloudKit?
-                    if let d = lastUploadDate {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Last upload")
-                                Spacer()
-                                Text(DateHelpers.relativeTime(from: d))
-                                    .foregroundColor(.secondary)
-                            }
-                            if let success = lastUploadSucceeded {
-                                Text(success ? " Reached CloudKit" : " Failed")
-                                    .font(.caption)
-                                    .foregroundColor(success ? .green : .red)
-                            }
-                            if let err = lastUploadError, !err.isEmpty {
-                                Text(err)
-                                    .font(.caption2)
-                                    .foregroundColor(.red)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    } else {
-                        HStack {
-                            Text("Upload status")
-                            Spacer()
-                            Text("No uploads yet")
-                                .foregroundColor(.secondary)
                         }
                     }
 
