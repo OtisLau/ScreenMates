@@ -66,7 +66,8 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let thresholdIndex = parseThresholdIndex(from: event.rawValue) ?? 0
         let lastIndex = sharedDefaults.integer(forKey: lastThresholdIndexKey)
 
-        var currentBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
+        let previousBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
+        var currentBlocks = previousBlocks
         if thresholdIndex > 0 {
             if thresholdIndex > lastIndex {
                 // Always advance the index so future deduplication works correctly.
@@ -111,9 +112,11 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         // 2b. Track post-midnight usage (12AM–4AM) for doom scroll notifications
         let hour = Calendar.current.component(.hour, from: now)
         if hour < 4 {
-            let delta = currentBlocks - sharedDefaults.integer(forKey: "DailyBlocksUsed")
-            let postMidnight = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
-            sharedDefaults.set(postMidnight + max(delta, 1), forKey: "PostMidnightBlocksUsed")
+            let actualDelta = currentBlocks - previousBlocks
+            if actualDelta > 0 {
+                let postMidnight = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
+                sharedDefaults.set(postMidnight + actualDelta, forKey: "PostMidnightBlocksUsed")
+            }
         }
 
         // 3. Persist
