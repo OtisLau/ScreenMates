@@ -97,7 +97,7 @@ struct AppConstants {
 
         // Post-midnight tracking (blocks accumulated between 12AM–4AM)
         static let postMidnightBlocksUsed = "PostMidnightBlocksUsed"
-        static let yesterdayPostMidnightBlocks = "YesterdayPostMidnightBlocks"
+
 
         // Notification dedup — stores sent notification keys for today
         static let notificationsSentToday = "NotificationsSentToday"
