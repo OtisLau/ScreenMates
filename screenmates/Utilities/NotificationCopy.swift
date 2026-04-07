@@ -20,7 +20,7 @@ struct NotificationCopy {
         "strong phone usage today",
         "this is getting hard to defend",
         "we need to talk about this",
-        "tough look today",
+        "tuff, great job on your today pal",
         "the phone is winning",
         "you lost today",
         "this is becoming a pattern",
@@ -52,7 +52,7 @@ struct NotificationCopy {
     static let morningDoomBodies = [
         "was doom scrolling for {time} past midnight last night",
         "while normal people slept you were scrolling for {time}",
-        "{time} of scrolling after midnight tough look",
+        "{time} of scrolling after midnight tuff",
         "was up scrolling for {time} instead of sleeping",
         "sleep tried to happen but scrolling happened instead for {time}",
         "fought sleep and won unfortunately",
@@ -80,7 +80,7 @@ struct NotificationCopy {
         "at this rate the phone is going to file taxes for you",
         "you are averaging more phone than sleep",
         "this week was a big win for your phone",
-        "tough week statistically"
+        "tuff week statistically"
     ]
 
     // MARK: - Generators (Title = Name)
