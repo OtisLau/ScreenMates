@@ -56,7 +56,6 @@ struct AppConstants {
 
         // Config values mirrored into App Group so the extension and widget can read them
         static let sharedBlockSizeMinutes  = "SharedBlockSizeMinutes"
-        static let monitoringSetupTimestamp = "MonitoringSetupTimestamp"
 
         // Last threshold index where we already performed automatic batch rollover.
         static let lastAutoBatchRolloverIndex = "LastAutoBatchRolloverIndex"

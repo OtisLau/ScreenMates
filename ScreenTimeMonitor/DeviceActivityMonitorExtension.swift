@@ -5,7 +5,6 @@ import Foundation
 class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     let suiteName = "group.com.otishlau.screenmates"
-    private let monitoringSetupKey = "MonitoringSetupTimestamp"
     private let lastThresholdIndexKey = "LastThresholdIndex"
 
     private lazy var sharedDefaults: UserDefaults? = UserDefaults(suiteName: suiteName)
@@ -32,8 +31,8 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         sharedDefaults.set(event.rawValue, forKey: "LastExtensionWakeEvent")
 
         // Ignore events from yesterday's schedule — app will restart monitoring on next wake.
-        let lastDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? .distantPast
-        guard Calendar.current.isDateInToday(lastDate) else {
+        let lastBlockDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? .distantPast
+        guard Calendar.current.isDateInToday(lastBlockDate) else {
             print("Ignoring stale threshold from previous day's schedule")
             return
         }
@@ -42,36 +41,29 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let thresholdIndex = parseThresholdIndex(from: event.rawValue) ?? 0
         let lastIndex = sharedDefaults.integer(forKey: lastThresholdIndexKey)
 
-        // Deduplicate: ignore duplicate or out-of-order callbacks.
+        // Deduplicate and track position for batch-exhaustion detection by the main app.
         guard thresholdIndex > lastIndex else { return }
         sharedDefaults.set(thresholdIndex, forKey: lastThresholdIndexKey)
 
-        let delta = thresholdIndex - lastIndex
-        let previousBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
-        var currentBlocks = min(previousBlocks + delta, maxTrackableBlocksPerDay)
-
-        // Post-restart rate limit: cap growth to real elapsed time in the 20 min after a
-        // restart, so iOS catch-up replays (delta=1 each) can't inflate the count.
-        if let setupDate = sharedDefaults.object(forKey: monitoringSetupKey) as? Date {
-            let setupAge = now.timeIntervalSince(setupDate)
-            if setupAge >= 0 && setupAge <= 20 * 60 {
-                let blocksAtSetup = sharedDefaults.integer(forKey: "BlocksAtMonitoringSetup")
-                let ceiling = blocksAtSetup + Int(setupAge / Double(blockSizeMinutes * 60)) + 2
-                if currentBlocks > ceiling {
-                    print("Post-restart rate limit: capped \(currentBlocks) to \(ceiling)")
-                    currentBlocks = ceiling
-                }
-            }
+        // Wall-clock rate limit: only count a block if enough real time has elapsed since
+        // the last one. This makes catch-up replays after restartMonitoring() no-ops —
+        // they all fire in rapid succession so the rate limit blocks all but the first.
+        let blockSize = blockSizeMinutes
+        let blockSizeSeconds = Double(blockSize * 60)
+        let elapsed = now.timeIntervalSince(lastBlockDate)
+        guard elapsed >= blockSizeSeconds else {
+            print("Rate limited: \(Int(elapsed))s since last block (need \(blockSize * 60)s)")
+            return
         }
+
+        let previousBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
+        let currentBlocks = min(previousBlocks + 1, maxTrackableBlocksPerDay)
 
         // Track post-midnight usage (12AM–4AM) for notifications.
         let hour = Calendar.current.component(.hour, from: now)
-        if hour < 4 {
-            let actualDelta = currentBlocks - previousBlocks
-            if actualDelta > 0 {
-                let postMidnight = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
-                sharedDefaults.set(postMidnight + actualDelta, forKey: "PostMidnightBlocksUsed")
-            }
+        if hour < 4 && currentBlocks > previousBlocks {
+            let postMidnight = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
+            sharedDefaults.set(postMidnight + 1, forKey: "PostMidnightBlocksUsed")
         }
 
         sharedDefaults.set(currentBlocks, forKey: "DailyBlocksUsed")

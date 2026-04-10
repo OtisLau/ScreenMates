@@ -43,8 +43,6 @@ class MonitoringManager {
     }
 
     // Re-register monitoring with a completely fresh batch of events starting from block_1.
-    // Always wipes the threshold index so there is no stale data that could produce a
-    // huge delta if iOS replays or delivers out-of-order callbacks.
     func restartMonitoring() {
         let selection: FamilyActivitySelection? = {
             guard let data = defaults.data(forKey: selectionKey) else { return nil }
@@ -58,8 +56,8 @@ class MonitoringManager {
 
         _ = performHardDayRolloverResetIfNeeded()
 
-        // Always reset the threshold index so the extension starts counting from block_1.
-        // DailyBlocksUsed is preserved — we only wipe the indices to prevent stale deltas.
+        // Reset the threshold index so new batch events (block_1 onward) aren't rejected
+        // by the extension's dedup guard. DailyBlocksUsed is preserved.
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
 
@@ -129,13 +127,6 @@ class MonitoringManager {
 
         let center = DeviceActivityCenter()
         center.stopMonitoring()
-
-        // Stamp when monitoring was last started and snapshot the current block count
-        // so the extension can rate-limit catch-up thresholds that fire immediately
-        // after restart (iOS replays all thresholds up to today's accumulated activity).
-        sharedDefaults?.set(Date(), forKey: AppConstants.Keys.monitoringSetupTimestamp)
-        sharedDefaults?.set(sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0,
-                            forKey: "BlocksAtMonitoringSetup")
 
         do {
             try center.startMonitoring(DeviceActivityName("dailyTracking"), during: schedule, events: events)
