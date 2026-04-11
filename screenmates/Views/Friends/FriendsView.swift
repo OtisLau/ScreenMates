@@ -302,6 +302,7 @@ struct FriendsView: View {
         let store = CNContactStore()
         let keys = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactPhoneNumbersKey] as [CNKeyDescriptor]
         let request = CNContactFetchRequest(keysToFetch: keys)
+        let myPhoneHash = PhoneAuthManager.shared.phoneHash
 
         var hashToName: [String: String] = [:]
         try? store.enumerateContacts(with: request) { contact, _ in
@@ -309,7 +310,9 @@ struct FriendsView: View {
                 .filter { !$0.isEmpty }.joined(separator: " ")
             for phone in contact.phoneNumbers {
                 if let e164 = PhoneAuthManager.normalizeToE164(phone.value.stringValue) {
-                    hashToName[PhoneAuthManager.sha256(e164)] = name
+                    let phoneHash = PhoneAuthManager.sha256(e164)
+                    guard phoneHash != myPhoneHash else { continue }
+                    hashToName[phoneHash] = name
                 }
             }
         }

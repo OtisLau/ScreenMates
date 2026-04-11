@@ -387,6 +387,8 @@ struct ContactsPermissionView: View {
         let store = CNContactStore()
         let keys = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactPhoneNumbersKey] as [CNKeyDescriptor]
         let request = CNContactFetchRequest(keysToFetch: keys)
+        let myPhoneHash = auth.phoneHash
+        let myUserID = CloudKitManager.shared.myID
 
         var hashToName: [String: String] = [:]
         try? store.enumerateContacts(with: request) { contact, _ in
@@ -395,7 +397,9 @@ struct ContactsPermissionView: View {
                 .joined(separator: " ")
             for phone in contact.phoneNumbers {
                 if let e164 = PhoneAuthManager.normalizeToE164(phone.value.stringValue) {
-                    hashToName[PhoneAuthManager.sha256(e164)] = name
+                    let phoneHash = PhoneAuthManager.sha256(e164)
+                    guard phoneHash != myPhoneHash else { continue }
+                    hashToName[phoneHash] = name
                 }
             }
         }
@@ -405,7 +409,9 @@ struct ContactsPermissionView: View {
         do {
             let profiles = try await CloudKitManager.shared.fetchUsersByPhoneHashes(Array(hashToName.keys))
             return profiles.compactMap { profile in
-                guard let name = hashToName[profile.phoneHash] else { return nil }
+                guard profile.userID != myUserID,
+                      let name = hashToName[profile.phoneHash]
+                else { return nil }
                 return ContactMatch(contactName: name, displayName: profile.displayName, userID: profile.userID)
             }
         } catch {
