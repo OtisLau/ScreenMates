@@ -29,8 +29,7 @@ struct ContactsPermissionView: View {
         }
         .onAppear {
             // If permission already granted from a previous session, go straight to search.
-            let status = CNContactStore.authorizationStatus(for: .contacts)
-            if status == .authorized || status == .limited {
+            if CNContactStore.authorizationStatus(for: .contacts) == .authorized {
                 startSearch()
             }
         }
@@ -223,7 +222,7 @@ struct ContactsPermissionView: View {
     private func requestContacts() {
         let store = CNContactStore()
         switch CNContactStore.authorizationStatus(for: .contacts) {
-        case .authorized, .limited:
+        case .authorized:
             startSearch()
         case .notDetermined:
             isSearching = true
