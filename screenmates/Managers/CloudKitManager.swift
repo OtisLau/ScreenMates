@@ -335,41 +335,23 @@ class CloudKitManager: ObservableObject {
         guard !myGroupID.isEmpty else { return }
 
         isLoading = true
+        let refreshingGroupID = myGroupID
 
-        let predicate = NSPredicate(format: "group_id == %@", myGroupID)
-        let query = CKQuery(recordType: "UserProfile", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "blocks_used", ascending: false)]
-
-        database.fetch(withQuery: query, inZoneWith: nil, resultsLimit: 20) { [weak self] result in
-            guard let self else { return }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.isLoading = false
-
-                switch result {
-                case .success(let (matchResults, _)):
-                    var members: [MemberData] = []
-                    for match in matchResults {
-                        if case .success(let record) = match.1 {
-                            let userID = record["user_id"] as? String ?? record.recordID.recordName
-                            members.append(MemberData(
-                                userID: userID,
-                                displayName: record["display_name"] as? String ?? userID,
-                                blocks: record["blocks_used"] as? Int ?? 0,
-                                lastUpdate: record["last_updated"] as? Date ?? Date(),
-                                postMidnightBlocks: record["post_midnight_blocks"] as? Int ?? 0
-                            ))
-                        }
-                    }
-                    self.groupMembers = self.dedupeMembers(members)
-                    self.lastSyncTime = Date()
-                    self.cacheLeaderboardData()
-                    print(" Fetched \(self.groupMembers.count) group members")
-
-                case .failure(let error):
-                    print(" Fetch failed: \(error.localizedDescription)")
-                    self.lastError = self.handleCloudKitError(error)
+        Task { @MainActor in
+            defer { isLoading = false }
+            do {
+                let members = try await fetchGroupMembersAsync()
+                guard refreshingGroupID == myGroupID else {
+                    print(" Discarding stale fetch results — group changed mid-fetch")
+                    return
                 }
+                groupMembers = members
+                lastSyncTime = Date()
+                cacheLeaderboardData()
+                print(" Fetched \(members.count) group members")
+            } catch {
+                print(" Fetch failed: \(error.localizedDescription)")
+                lastError = handleCloudKitError(error)
             }
         }
     }

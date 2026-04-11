@@ -12,10 +12,6 @@ struct DashboardView: View {
         cloudManager.currentBlocksUsed * AppConstants.currentBlockSize
     }
 
-    private var sortedMembers: [MemberData] {
-        cloudManager.groupMembers.sorted { $0.blocks > $1.blocks }
-    }
-
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
@@ -61,14 +57,14 @@ struct DashboardView: View {
                                 emptyState
                             } else {
                                 VStack(spacing: 0) {
-                                    ForEach(Array(sortedMembers.enumerated()), id: \.element.id) { index, member in
+                                    ForEach(Array(cloudManager.groupMembers.enumerated()), id: \.element.id) { index, member in
                                         GroupMemberRow(
                                             member: member,
                                             isCurrentUser: member.userID == cloudManager.myID,
                                             rank: index + 1
                                         )
 
-                                        if index < sortedMembers.count - 1 {
+                                        if index < cloudManager.groupMembers.count - 1 {
                                             Rectangle()
                                                 .fill(Color.primary.opacity(0.06))
                                                 .frame(height: 1)

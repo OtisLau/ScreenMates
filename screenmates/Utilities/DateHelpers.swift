@@ -26,38 +26,8 @@ struct DateHelpers {
         }
     }
     
-    /// Calculate time remaining until midnight
-    static func timeUntilMidnight() -> String {
-        let calendar = Calendar.current
-        let now = Date()
-        
-        guard let midnight = calendar.nextDate(
-            after: now,
-            matching: DateComponents(hour: 0, minute: 0),
-            matchingPolicy: .nextTime
-        ) else {
-            return "Unknown"
-        }
-        
-        let components = calendar.dateComponents([.hour, .minute], from: now, to: midnight)
-        let hours = components.hour ?? 0
-        let minutes = components.minute ?? 0
-        
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        } else {
-            return "\(minutes)m"
-        }
-    }
-    
     /// Check if a date is today
     static func isToday(_ date: Date) -> Bool {
         return Calendar.current.isDateInToday(date)
-    }
-    
-    /// Check if it's a new day since last check
-    static func isNewDay(since lastDate: Date?) -> Bool {
-        guard let lastDate = lastDate else { return true }
-        return !Calendar.current.isDateInToday(lastDate)
     }
 }

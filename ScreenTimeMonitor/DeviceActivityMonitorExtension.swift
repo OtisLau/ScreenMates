@@ -57,7 +57,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         }
 
         let previousBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
-        let currentBlocks = min(previousBlocks + 1, maxTrackableBlocksPerDay)
+        let currentBlocks = min(max(thresholdIndex, previousBlocks), maxTrackableBlocksPerDay)
 
         // Track post-midnight usage (12AM–4AM) for notifications.
         let hour = Calendar.current.component(.hour, from: now)

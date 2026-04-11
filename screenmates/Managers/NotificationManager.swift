@@ -3,7 +3,6 @@ import UserNotifications
 
 class NotificationManager {
     static let shared = NotificationManager()
-    private let sharedDefaults = UserDefaults(suiteName: AppConstants.appGroupSuite)
     private init() {
         // Register default so existing users have notifications enabled
         UserDefaults.standard.register(defaults: ["notificationsEnabled": true])
@@ -178,9 +177,11 @@ class NotificationManager {
     // MARK: - Deduplication
 
     private func todayString() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        let day = components.day ?? 0
+        return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
     private func hasAlreadySent(key: String) -> Bool {
