@@ -12,10 +12,10 @@ struct ContentView: View {
                 OnboardingView()
             } else if !phoneAuth.isPhoneVerified {
                 PhoneEntryView()
-            } else if !phoneAuth.contactsHandled {
-                ContactsPermissionView()
             } else if cloudManager.myDisplayName.isEmpty {
                 UsernameSetupView()
+            } else if !phoneAuth.contactsHandled {
+                ContactsPermissionView()
             } else {
                 DashboardView()
             }

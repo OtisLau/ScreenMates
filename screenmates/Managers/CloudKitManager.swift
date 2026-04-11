@@ -357,18 +357,30 @@ class CloudKitManager: ObservableObject {
     // Fetch UserProfile records whose phone_hash matches any of the provided hashes.
     // Used by ContactsPermissionView to discover which contacts are on ScreenMates.
     func fetchUsersByPhoneHashes(_ hashes: [String]) async throws -> [(userID: String, displayName: String, phoneHash: String)] {
-        guard !hashes.isEmpty else { return [] }
-        let predicate = NSPredicate(format: "phone_hash IN %@", hashes)
-        let query = CKQuery(recordType: "UserProfile", predicate: predicate)
-        let (matchResults, _) = try await database.records(matching: query)
-        return matchResults.compactMap { _, result in
-            guard case .success(let record) = result,
-                  let userID      = record["user_id"]      as? String,
-                  let displayName = record["display_name"] as? String,
-                  let phoneHash   = record["phone_hash"]   as? String
-            else { return nil }
-            return (userID: userID, displayName: displayName, phoneHash: phoneHash)
+        let uniqueHashes = Array(Set(hashes)).filter { !$0.isEmpty }
+        guard !uniqueHashes.isEmpty else { return [] }
+
+        var profilesByUserID: [String: (userID: String, displayName: String, phoneHash: String)] = [:]
+        let chunkSize = 100
+
+        for startIndex in stride(from: 0, to: uniqueHashes.count, by: chunkSize) {
+            let endIndex = min(startIndex + chunkSize, uniqueHashes.count)
+            let chunk = Array(uniqueHashes[startIndex..<endIndex])
+            let predicate = NSPredicate(format: "phone_hash IN %@", chunk)
+            let query = CKQuery(recordType: "UserProfile", predicate: predicate)
+            let (matchResults, _) = try await database.records(matching: query)
+
+            for (_, result) in matchResults {
+                guard case .success(let record) = result,
+                      let userID      = record["user_id"]      as? String,
+                      let displayName = record["display_name"] as? String,
+                      let phoneHash   = record["phone_hash"]   as? String
+                else { continue }
+                profilesByUserID[userID] = (userID: userID, displayName: displayName, phoneHash: phoneHash)
+            }
         }
+
+        return Array(profilesByUserID.values)
     }
 
     // MARK: - Friend Requests
