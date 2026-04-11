@@ -70,6 +70,8 @@ struct AppConstants {
         // Notification dedup
         static let notificationsSentToday = "NotificationsSentToday"
         static let notificationsSentDate  = "NotificationsSentDate"
+
+        static let monitoringSetupTimestamp = "MonitoringSetupTimestamp"
     }
 
     static func thresholdEventsPerDay(for blockSize: Int) -> Int {

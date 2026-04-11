@@ -57,7 +57,6 @@ class NotificationManager {
 
     private func scheduleOverLimitNotifications(members: [MemberData], goalMinutes: Int) {
         let today = todayString()
-        var scheduled = 0
 
         for member in members {
             guard member.minutesUsed > goalMinutes else { continue }
@@ -67,8 +66,8 @@ class NotificationManager {
 
             let copy = NotificationCopy.randomOverLimit(
                 name: member.displayName,
-                time: NotificationCopy.formatTime(member.minutesUsed),
-                limit: NotificationCopy.formatTime(goalMinutes)
+                usedMinutes: member.minutesUsed,
+                goalMinutes: goalMinutes
             )
             let content = UNMutableNotificationContent()
             content.title = copy.title
@@ -83,10 +82,6 @@ class NotificationManager {
 
             UNUserNotificationCenter.current().add(request)
             markSent(key: dedupKey)
-            scheduled += 1
-
-            // Cap at 3 immediate notifications to avoid flooding
-            if scheduled >= 3 { break }
         }
     }
 
@@ -107,8 +102,11 @@ class NotificationManager {
 
         // Pick the worst offender for the notification
         let worst = overBy60.max(by: { $0.minutesUsed < $1.minutesUsed })!
-        let time = NotificationCopy.formatTime(worst.minutesUsed)
-        let copy = NotificationCopy.randomEndOfDay(name: worst.displayName, time: time)
+        let copy = NotificationCopy.randomEndOfDay(
+            name: worst.displayName,
+            usedMinutes: worst.minutesUsed,
+            goalMinutes: goalMinutes
+        )
 
         let content = UNMutableNotificationContent()
         content.title = copy.title
@@ -134,8 +132,8 @@ class NotificationManager {
         // Between 6 AM and noon, check for late-night usage
         guard hour >= 6 && hour < 12 else { return }
 
-        // Minimum 1h of post-midnight usage to trigger (4 blocks in prod, 60 in test)
-        let minBlocks = 60 / AppConstants.currentBlockSize
+        // Minimum 1.5h of post-midnight usage to trigger
+        let minBlocks = max(1, Int(ceil(90.0 / Double(AppConstants.currentBlockSize))))
         let doomScrollers = members.filter { $0.postMidnightBlocks >= minBlocks }
         guard !doomScrollers.isEmpty else { return }
 
@@ -143,8 +141,10 @@ class NotificationManager {
             let dedupKey = "morning-\(member.userID)-\(today)"
             guard !hasAlreadySent(key: dedupKey) else { continue }
 
-            let time = NotificationCopy.formatTime(member.postMidnightMinutes)
-            let copy = NotificationCopy.randomMorningDoom(name: member.displayName, time: time)
+            let copy = NotificationCopy.randomMorningDoom(
+                name: member.displayName,
+                postMidnightMinutes: member.postMidnightMinutes
+            )
 
             let content = UNMutableNotificationContent()
             content.title = copy.title

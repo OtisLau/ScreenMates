@@ -2,112 +2,116 @@ import Foundation
 
 struct NotificationCopy {
 
+    struct NotificationTemplate {
+        let body: String
+        let severity: Severity
+    }
+
+    enum Severity: String, CaseIterable {
+        case mild
+        case spicy
+        case nuclear
+    }
+
     // MARK: - Over Limit
 
-    static let overLimitBodies = [
-        "{time} today be serious",
-        "just blew past the limit like it wasnt even there",
-        "went right past the limit of {limit}",
-        "the limit meant nothing to you pal",
-        "thats enough phone for today respectfully",
-        "put the phone down gently",
-        "go outside for 10 minutes",
-        "this is why we set the limit",
-        "we had one rule",
-        "be honest you knew the limit was there",
-        "saw the limit and said not today",
-        "unbelievable performance today",
-        "strong phone usage today",
-        "this is getting hard to defend",
-        "we need to talk about this",
-        "tuff, great job on your today pal",
-        "the phone is winning",
-        "you lost today",
-        "this is becoming a pattern",
-        "please just stand up and walk around"
+    static let overLimitTemplates: [NotificationTemplate] = [
+        .init(body: "{weekday} and you already hit {time}. the {limit} goal never stood a chance.", severity: .mild),
+        .init(body: "{time} today and it’s not even dinner. congrats on speedrunning the limit.", severity: .mild),
+        .init(body: "phone time at {time}, goal was {limit}. math says chill, you said nah.", severity: .mild),
+        .init(body: "blew past {limit} by {overage}. you’re the reason screen time charts look scary.", severity: .spicy),
+        .init(body: "{weekday} check-in: goal {limit}, actual {time}. explain this to the group chat.", severity: .spicy),
+        .init(body: "{name} is farming {time} of scrolling. {limit} was a suggestion apparently.", severity: .spicy),
+        .init(body: "{time} and counting. put the phone down before we file a missing person report for your attention span.", severity: .nuclear),
+        .init(body: "limit was {limit}, you delivered {time}. that’s a performance review waiting to happen.", severity: .nuclear),
+        .init(body: "{weekday} is canceled because you chose {time} of screen time. overage: {overage}. do better.", severity: .nuclear)
     ]
 
     // MARK: - End of Day Summary
 
-    static let endOfDayBodies = [
-        "{time} today thats a full shift",
-        "{time} today rent is due",
-        "{time} today go look at a tree",
-        "{time} today what are we doing",
-        "{time} today be honest what were you even doing",
-        "{time} today impressive in the worst way",
-        "{time} today mathematically this is not looking good",
-        "{time} today we ran the numbers and they are bad",
-        "{time} today we need to talk",
-        "{time} today this is getting out of hand",
-        "{time} today this will be reviewed tomorrow",
-        "{time} today strong performance unfortunately",
-        "{time} today blink twice if you need help",
-        "{time} today stand up immediately",
-        "{time} today thats basically a part time job"
+    static let endOfDayTemplates: [NotificationTemplate] = [
+        .init(body: "{weekday} wrap: {time} logged. thats a part-time job worth of doom scrolls.", severity: .mild),
+        .init(body: "{time} today which is wild considering the goal was {limit}. maybe see a cloud instead of iCloud.", severity: .mild),
+        .init(body: "rent is due because you basically worked a shift on your phone ({time}).", severity: .spicy),
+        .init(body: "{time} of usage, {overage} over goal. the squad saw the stats and is concerned.", severity: .spicy),
+        .init(body: "{weekday} L recap: {time} online, zero hours offline. we will be discussing this.", severity: .nuclear),
+        .init(body: "you torched {time} today. accountants are flagging your screen time as a liability.", severity: .nuclear)
     ]
 
     // MARK: - Morning Doom Scroll
 
-    static let morningDoomBodies = [
-        "was doom scrolling for {time} past midnight last night",
-        "while normal people slept you were scrolling for {time}",
-        "{time} of scrolling after midnight tuff",
-        "was up scrolling for {time} instead of sleeping",
-        "sleep tried to happen but scrolling happened instead for {time}",
-        "fought sleep and won unfortunately",
-        "decided tomorrow would be tired",
-        "chose phone over sleep again",
-        "you were not supposed to be awake for {time}",
-        "thats why youre tired today",
-        "we saw what you were doing last night"
+    static let morningDoomTemplates: [NotificationTemplate] = [
+        .init(body: "we saw the midnight shift: {time} of doom scrolling. go touch sunlight maybe.", severity: .mild),
+        .init(body: "normal people slept. you ran {time} of thumb cardio past midnight.", severity: .mild),
+        .init(body: "{time} after midnight? tomorrow is already tired and mad at you.", severity: .spicy),
+        .init(body: "you essentially pulled a night shift on your phone ({time}). enjoy the zombie vibes.", severity: .spicy),
+        .init(body: "vampire hours detected: {time} of scrolling. melatonin has left the chat.", severity: .nuclear),
+        .init(body: "screens from 12–?? for {time}. at this point the moon is filing a complaint.", severity: .nuclear)
     ]
 
     // MARK: - Weekly Roast
 
-    static let weeklyRoastBodies = [
-        "was on their phone over 6 hours for all 7 days of the week",
-        "averaged {time} a day this week thats basically a full time job",
-        "spent {weeklyHours} hours on their phone this week",
-        "spent more time on their phone this week than most people work",
-        "weekly screen time report just came in and its not looking good",
-        "put up career numbers this week",
-        "and their phone had a very busy week",
-        "this is an all time performance",
-        "if scrolling was homework you would have straight As",
-        "we checked the weekly numbers twice hoping it was wrong",
-        "the weekly screen time graph is going the wrong direction",
-        "at this rate the phone is going to file taxes for you",
-        "you are averaging more phone than sleep",
-        "this week was a big win for your phone",
-        "tuff week statistically"
+    static let weeklyRoastTemplates: [NotificationTemplate] = [
+        .init(body: "averaged {time} a day. that’s a career-high in procrastination.", severity: .mild),
+        .init(body: "{weeklyHours} total hours this week. basically hired your phone full-time.", severity: .mild),
+        .init(body: "sat on your phone more than you stood up this week. talent!", severity: .spicy),
+        .init(body: "screen time graph is vertical. we triple-checked {weeklyHours} hours and it’s still reckless.", severity: .spicy),
+        .init(body: "if scrolling was homework you’d be valedictorian. {time} daily is unreal.", severity: .nuclear),
+        .init(body: "phone dominated every single day. consider filing it on your taxes.", severity: .nuclear)
     ]
 
     // MARK: - Generators (Title = Name)
 
-    static func randomOverLimit(name: String, time: String, limit: String) -> (title: String, body: String) {
-        var body = overLimitBodies.randomElement()!
-        body = body.replacingOccurrences(of: "{time}", with: time)
-        body = body.replacingOccurrences(of: "{limit}", with: limit)
+    static func randomOverLimit(name: String, usedMinutes: Int, goalMinutes: Int, date: Date = Date()) -> (title: String, body: String) {
+        let severity = severityForOverage(minutesOver: usedMinutes - goalMinutes)
+        let template = pickTemplate(from: overLimitTemplates, severity: severity)
+        let replacements: [String: String] = [
+            "name": name,
+            "time": formatTime(usedMinutes),
+            "limit": formatTime(goalMinutes),
+            "overage": formatTime(max(usedMinutes - goalMinutes, 0)),
+            "weekday": weekdayString(from: date)
+        ]
+        let body = format(template: template, replacements: replacements)
         return (title: name, body: body)
     }
 
-    static func randomEndOfDay(name: String, time: String) -> (title: String, body: String) {
-        var body = endOfDayBodies.randomElement()!
-        body = body.replacingOccurrences(of: "{time}", with: time)
+    static func randomEndOfDay(name: String, usedMinutes: Int, goalMinutes: Int, date: Date = Date()) -> (title: String, body: String) {
+        let severity = severityForOverage(minutesOver: usedMinutes - goalMinutes)
+        let template = pickTemplate(from: endOfDayTemplates, severity: severity)
+        let replacements: [String: String] = [
+            "name": name,
+            "time": formatTime(usedMinutes),
+            "limit": formatTime(goalMinutes),
+            "overage": formatTime(max(usedMinutes - goalMinutes, 0)),
+            "weekday": weekdayString(from: date)
+        ]
+        let body = format(template: template, replacements: replacements)
         return (title: name, body: body)
     }
 
-    static func randomMorningDoom(name: String, time: String) -> (title: String, body: String) {
-        var body = morningDoomBodies.randomElement()!
-        body = body.replacingOccurrences(of: "{time}", with: time)
+    static func randomMorningDoom(name: String, postMidnightMinutes: Int, date: Date = Date()) -> (title: String, body: String) {
+        let severity = severityForLateNight(minutes: postMidnightMinutes)
+        let template = pickTemplate(from: morningDoomTemplates, severity: severity)
+        let replacements: [String: String] = [
+            "name": name,
+            "time": formatTime(postMidnightMinutes),
+            "weekday": weekdayString(from: date)
+        ]
+        let body = format(template: template, replacements: replacements)
         return (title: name, body: body)
     }
 
-    static func randomWeeklyRoast(name: String, time: String, weeklyHours: String) -> (title: String, body: String) {
-        var body = weeklyRoastBodies.randomElement()!
-        body = body.replacingOccurrences(of: "{time}", with: time)
-        body = body.replacingOccurrences(of: "{weeklyHours}", with: weeklyHours)
+    static func randomWeeklyRoast(name: String, averageMinutes: Int, weeklyHours: Int) -> (title: String, body: String) {
+        let severity = severityForWeekly(hours: weeklyHours)
+        let template = pickTemplate(from: weeklyRoastTemplates, severity: severity)
+        let replacements: [String: String] = [
+            "name": name,
+            "time": formatTime(averageMinutes),
+            "weeklyHours": "\(weeklyHours)",
+            "weekday": weekdayString(from: Date())
+        ]
+        let body = format(template: template, replacements: replacements)
         return (title: name, body: body)
     }
 
@@ -120,5 +124,58 @@ struct NotificationCopy {
         if h > 0 && m > 0 { return "\(h)h \(m)min" }
         else if h > 0 { return "\(h)h" }
         else { return "\(m)min" }
+    }
+
+    private static func format(template: NotificationTemplate, replacements: [String: String]) -> String {
+        var body = template.body
+        for (key, value) in replacements {
+            body = body.replacingOccurrences(of: "{\(key)}", with: value)
+        }
+        return body
+    }
+
+    private static func pickTemplate(from templates: [NotificationTemplate], severity: Severity) -> NotificationTemplate {
+        let filtered = templates.filter { $0.severity == severity }
+        return (filtered.isEmpty ? templates : filtered).randomElement()!
+    }
+
+    private static func weekdayString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: date)
+    }
+
+    private static func severityForOverage(minutesOver: Int) -> Severity {
+        switch minutesOver {
+        case ..<30:
+            return .mild
+        case 30..<90:
+            return .spicy
+        default:
+            return .nuclear
+        }
+    }
+
+    private static func severityForLateNight(minutes: Int) -> Severity {
+        switch minutes {
+        case ..<45:
+            return .mild
+        case 45..<90:
+            return .spicy
+        default:
+            return .nuclear
+        }
+    }
+
+    private static func severityForWeekly(hours: Int) -> Severity {
+        switch hours {
+        case ..<30:
+            return .mild
+        case 30..<42:
+            return .spicy
+        default:
+            return .nuclear
+        }
     }
 }
