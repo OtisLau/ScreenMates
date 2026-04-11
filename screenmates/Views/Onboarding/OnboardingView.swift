@@ -20,7 +20,6 @@ struct OnboardingView: View {
 
     @State private var permissionGranted = false
     @State private var notificationGranted = false
-    @State private var isStartingMonitoring = false
     @State private var isRequestingPermission = false
     @State private var isRequestingNotifications = false
     @State private var showAuthError = false
@@ -81,22 +80,16 @@ struct OnboardingView: View {
                         startMonitoring()
                     } label: {
                         HStack(spacing: 8) {
-                            if isStartingMonitoring {
-                                SpinnerIcon()
-                                Text("Getting Started…")
-                                    .fontWeight(.semibold)
-                            } else {
-                                Text("Get Started")
-                                    .fontWeight(.semibold)
-                                Image(systemName: "arrow.right")
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
+                            Text("Get Started")
+                                .fontWeight(.semibold)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 14, weight: .semibold))
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                     }
                     .modifier(OnboardingContinueButtonStyle(enabled: permissionGranted))
-                    .disabled(isStartingMonitoring || !permissionGranted)
+                    .disabled(!permissionGranted)
                 }
                 .padding(.horizontal, 24)
 
