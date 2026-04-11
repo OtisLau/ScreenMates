@@ -102,18 +102,20 @@ struct DashboardView: View {
                     Button {
                         showingFriends = true
                     } label: {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: "person.2.fill")
-
-                            if cloudManager.pendingRequests.count > 0 {
-                                Circle()
-                                    .fill(Color.red)
-                                    .frame(width: 11, height: 11)
-                                    .offset(x: -3, y: 3)
-                                    .accessibilityHidden(true)
+                        Image(systemName: "person.2.fill")
+                            .overlay(alignment: .topTrailing) {
+                                if cloudManager.pendingRequests.count > 0 {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 9, height: 9)
+                                        .overlay {
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 1.5)
+                                        }
+                                        .offset(x: 2, y: -2)
+                                        .accessibilityHidden(true)
+                                }
                             }
-                        }
-                        .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(friendsButtonAccessibilityLabel)
