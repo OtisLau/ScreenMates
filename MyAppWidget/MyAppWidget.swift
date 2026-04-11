@@ -17,6 +17,19 @@ struct CachedMember: Codable, Identifiable {
     let blocks: Int
     let lastUpdate: Date
     let postMidnightBlocks: Int?
+    let personalGoalMinutes: Int?
+
+    // Backward-compat decode — old cache entries without personalGoalMinutes still load.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id                  = try c.decode(String.self, forKey: .id)
+        userID              = try c.decode(String.self, forKey: .userID)
+        displayName         = try c.decode(String.self, forKey: .displayName)
+        blocks              = try c.decode(Int.self,    forKey: .blocks)
+        lastUpdate          = try c.decode(Date.self,   forKey: .lastUpdate)
+        postMidnightBlocks  = try? c.decode(Int.self,   forKey: .postMidnightBlocks)
+        personalGoalMinutes = try? c.decode(Int.self,   forKey: .personalGoalMinutes)
+    }
 
     func minutesUsed(blockSize: Int) -> Int { blocks * blockSize }
 
@@ -34,13 +47,13 @@ struct SimpleEntry: TimelineEntry {
     let date: Date
     let members: [CachedMember]
     let blockSizeMinutes: Int
-    let goalMinutes: Int
+    let myGoalMinutes: Int
     let myUserID: String
 }
 
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date(), members: [], blockSizeMinutes: 15, goalMinutes: 0, myUserID: "")
+        SimpleEntry(date: Date(), members: [], blockSizeMinutes: 15, myGoalMinutes: 0, myUserID: "")
     }
     func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
         completion(loadEntry())
@@ -54,17 +67,22 @@ struct Provider: TimelineProvider {
         let defaults = UserDefaults(suiteName: WidgetConstants.appGroupSuite)
         let bs = defaults?.integer(forKey: WidgetConstants.blockSizeKey) ?? 0
         let blockSize = bs > 0 ? bs : 15
-        let goalMinutes = defaults?.integer(forKey: WidgetConstants.goalMinutesKey) ?? 0
+        let myGoalMinutes = defaults?.integer(forKey: WidgetConstants.goalMinutesKey) ?? 0
         let myUserID = defaults?.string(forKey: WidgetConstants.userIDKey) ?? ""
         var members: [CachedMember] = []
         if let data = defaults?.data(forKey: WidgetConstants.cachedLeaderboardKey) {
             members = (try? JSONDecoder().decode([CachedMember].self, from: data)) ?? []
         }
         members.sort { $0.blocks > $1.blocks }
-        return SimpleEntry(date: Date(), members: Array(members.prefix(4)), blockSizeMinutes: blockSize, goalMinutes: goalMinutes, myUserID: myUserID)
+        return SimpleEntry(
+            date: Date(),
+            members: Array(members.prefix(4)),
+            blockSizeMinutes: blockSize,
+            myGoalMinutes: myGoalMinutes,
+            myUserID: myUserID
+        )
     }
 }
-
 
 
 // MARK: - Single member row
@@ -79,13 +97,11 @@ private struct WidgetMemberRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Rank
             Text("\(rank)")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.35))
                 .frame(width: 16, alignment: .center)
 
-            // Name
             Text(member.displayName)
                 .font(.system(size: isTop ? 16 : 14, weight: isTop ? .semibold : .regular))
                 .foregroundStyle(isTop ? Color.white : Color.white.opacity(0.7))
@@ -95,7 +111,6 @@ private struct WidgetMemberRow: View {
 
             Spacer(minLength: 0)
 
-            // Time
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 if hours > 0 {
                     Text("\(hours)")
@@ -117,7 +132,7 @@ private struct WidgetMemberRow: View {
     }
 }
 
-// MARK: - Dot grid background (matches AppBackground in main app)
+// MARK: - Dot grid background
 private struct WidgetDotGrid: View {
     var body: some View {
         Canvas { ctx, size in
@@ -142,7 +157,7 @@ private struct WidgetDotGrid: View {
     }
 }
 
-// MARK: - Pie slice mask (lightweight alternative to AngularGradient)
+// MARK: - Pie slice mask
 private struct PieSlice: Shape {
     let fraction: Double
 
@@ -183,11 +198,12 @@ private struct WidgetProgressBorder: View {
 struct MyAppWidgetEntryView: View {
     var entry: Provider.Entry
 
+    // Progress border shows how much of YOUR personal limit remains.
     private var myRemaining: Double {
-        guard entry.goalMinutes > 0 else { return 0 }
+        guard entry.myGoalMinutes > 0 else { return 0 }
         let me = entry.members.first { $0.userID == entry.myUserID }
         guard let me else { return 0 }
-        let used = min(Double(me.minutesUsed(blockSize: entry.blockSizeMinutes)) / Double(entry.goalMinutes), 1.0)
+        let used = min(Double(me.minutesUsed(blockSize: entry.blockSizeMinutes)) / Double(entry.myGoalMinutes), 1.0)
         return 1.0 - used
     }
 
@@ -223,7 +239,7 @@ struct MyAppWidgetEntryView: View {
                     .frame(width: geo.size.width, height: geo.size.height)
                 }
 
-                if entry.goalMinutes > 0 {
+                if entry.myGoalMinutes > 0 {
                     WidgetProgressBorder(remaining: myRemaining)
                         .frame(width: geo.size.width, height: geo.size.height)
                 }
@@ -243,8 +259,8 @@ struct MyAppWidget: Widget {
                     Color.black
                 }
         }
-        .configurationDisplayName("ScreenMates Group")
-        .description("Your group's screen time.")
+        .configurationDisplayName("ScreenMates")
+        .description("Top friends by screen time today.")
         .supportedFamilies([.systemSmall])
         .contentMarginsDisabled()
     }
