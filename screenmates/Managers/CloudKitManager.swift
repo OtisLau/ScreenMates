@@ -43,6 +43,9 @@ class CloudKitManager: ObservableObject {
     // Pending incoming friend requests (status == pending, recipient == me).
     @Published var pendingRequests: [FriendRequest] = []
 
+    // Pending outgoing friend requests (status == pending, requester == me).
+    @Published var outgoingPendingRequests: [OutgoingFriendRequest] = []
+
     // MARK: - UI State
     @Published var isLoading = false
     @Published var lastError: ErrorHandler.AppError?
@@ -412,12 +415,24 @@ class CloudKitManager: ObservableObject {
         let sentQuery = CKQuery(recordType: "Friendship",
             predicate: NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@", myID, toUserID))
         let (sentResults, _) = try await database.records(matching: sentQuery, resultsLimit: 1)
-        if !sentResults.isEmpty { throw FriendError.alreadyExists }
+        if sentResults.contains(where: { _, result in
+            guard case .success(let record) = result else { return false }
+            let status = record["status"] as? String
+            return status == "pending" || status == "accepted"
+        }) {
+            throw FriendError.alreadyExists
+        }
 
         let receivedQuery = CKQuery(recordType: "Friendship",
             predicate: NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@", toUserID, myID))
         let (receivedResults, _) = try await database.records(matching: receivedQuery, resultsLimit: 1)
-        if !receivedResults.isEmpty { throw FriendError.alreadyExists }
+        if receivedResults.contains(where: { _, result in
+            guard case .success(let record) = result else { return false }
+            let status = record["status"] as? String
+            return status == "pending" || status == "accepted"
+        }) {
+            throw FriendError.alreadyExists
+        }
 
         let record = CKRecord(recordType: "Friendship")
         record["requester_user_id"] = myID
@@ -433,6 +448,19 @@ class CloudKitManager: ObservableObject {
 
         _ = try await database.save(record)
         print("Friend request sent to \(toUserID)")
+    }
+
+    func hasAcceptedFriendship(withUserID userID: String) async throws -> Bool {
+        let sentQuery = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@ AND status == 'accepted'", myID, userID))
+        let receivedQuery = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@ AND status == 'accepted'", userID, myID))
+
+        let (sentResults, _) = try await database.records(matching: sentQuery, resultsLimit: 1)
+        if !sentResults.isEmpty { return true }
+
+        let (receivedResults, _) = try await database.records(matching: receivedQuery, resultsLimit: 1)
+        return !receivedResults.isEmpty
     }
 
     // Fetch pending incoming requests (where I am the recipient).
@@ -490,6 +518,61 @@ class CloudKitManager: ObservableObject {
         }
     }
 
+    // Fetch pending outgoing requests (where I am the requester).
+    @MainActor
+    func fetchOutgoingPendingRequests() async {
+        guard !myID.isEmpty else { return }
+        let predicate = NSPredicate(format: "requester_user_id == %@", myID)
+        let query = CKQuery(recordType: "Friendship", predicate: predicate)
+
+        do {
+            let (results, _) = try await database.records(matching: query)
+
+            var requests: [OutgoingFriendRequest] = []
+            var recipientIDs: [String] = []
+
+            for (_, result) in results {
+                if case .success(let record) = result,
+                   record["status"] as? String == "pending",
+                   let recipientID = record["recipient_user_id"] as? String {
+                    requests.append(OutgoingFriendRequest(
+                        id: record.recordID.recordName,
+                        recordID: record.recordID,
+                        recipientUserID: recipientID,
+                        recipientName: recipientID
+                    ))
+                    recipientIDs.append(recipientID)
+                }
+            }
+
+            if !recipientIDs.isEmpty {
+                let namePredicate = NSPredicate(format: "user_id IN %@", recipientIDs)
+                let nameQuery = CKQuery(recordType: "UserProfile", predicate: namePredicate)
+                let (nameResults, _) = try await database.records(matching: nameQuery)
+                var names: [String: String] = [:]
+                for (_, result) in nameResults {
+                    if case .success(let record) = result,
+                       let uid = record["user_id"] as? String,
+                       let name = record["display_name"] as? String {
+                        names[uid] = name
+                    }
+                }
+                requests = requests.map { req in
+                    OutgoingFriendRequest(
+                        id: req.id,
+                        recordID: req.recordID,
+                        recipientUserID: req.recipientUserID,
+                        recipientName: names[req.recipientUserID] ?? req.recipientName
+                    )
+                }
+            }
+
+            outgoingPendingRequests = requests
+        } catch {
+            print("fetchOutgoingPendingRequests failed: \(error.localizedDescription)")
+        }
+    }
+
     // Accept an incoming friend request — sets status to "accepted".
     func acceptFriendRequest(_ request: FriendRequest) async throws {
         do {
@@ -500,12 +583,64 @@ class CloudKitManager: ObservableObject {
             await MainActor.run {
                 pendingRequests.removeAll { $0.id == request.id }
             }
+            await fetchOutgoingPendingRequests()
             print("Accepted friend request from \(request.requesterName)")
             Task { @MainActor in await refreshFriendsNow(reason: "accept") }
         } catch {
             print("acceptFriendRequest failed: \(error.localizedDescription)")
             throw error
         }
+    }
+
+    // Accepts a reciprocal pending request when the other person already added me.
+    // This lets contact suggestions behave like "add back" instead of getting stuck
+    // as a local-only pending request.
+    func acceptPendingIncomingFriendRequest(fromUserID userID: String) async throws -> Bool {
+        guard !myID.isEmpty else { return false }
+
+        let predicate = NSPredicate(
+            format: "requester_user_id == %@ AND recipient_user_id == %@ AND status == 'pending'",
+            userID,
+            myID
+        )
+        let query = CKQuery(recordType: "Friendship", predicate: predicate)
+        let (results, _) = try await database.records(matching: query, resultsLimit: 1)
+
+        guard let record = results.compactMap({ _, result in
+            if case .success(let record) = result { return record }
+            return nil
+        }).first else {
+            return false
+        }
+
+        record["status"] = "accepted"
+        record["updated_at"] = Date()
+        _ = try await database.save(record)
+
+        let outgoingPredicate = NSPredicate(
+            format: "requester_user_id == %@ AND recipient_user_id == %@ AND status == 'pending'",
+            myID,
+            userID
+        )
+        let outgoingQuery = CKQuery(recordType: "Friendship", predicate: outgoingPredicate)
+        let (outgoingResults, _) = try await database.records(matching: outgoingQuery)
+        let outgoingRecords = outgoingResults.compactMap { _, result in
+            if case .success(let record) = result { return record }
+            return nil
+        }
+        for outgoingRecord in outgoingRecords {
+            outgoingRecord["status"] = "accepted"
+            outgoingRecord["updated_at"] = Date()
+            _ = try await database.save(outgoingRecord)
+        }
+
+        await MainActor.run {
+            pendingRequests.removeAll { $0.requesterUserID == userID }
+            outgoingPendingRequests.removeAll { $0.recipientUserID == userID }
+        }
+        await fetchOutgoingPendingRequests()
+        Task { @MainActor in await refreshFriendsNow(reason: "accept-reciprocal") }
+        return true
     }
 
     // Decline or remove — sets status to "rejected".
@@ -724,9 +859,7 @@ class CloudKitManager: ObservableObject {
             do {
                 try await saveProfileToCloud(blocks: 0)
                 print("Reset uploaded to CloudKit")
-                await MainActor.run { [weak self] in
-                    Task { await self?.refreshFriendsNow(reason: "reset") }
-                }
+                await self.refreshFriendsNow(reason: "reset")
             } catch {
                 print("Reset upload failed: \(error.localizedDescription)")
             }
@@ -751,6 +884,7 @@ class CloudKitManager: ObservableObject {
         usernameSet = false
         friends = []
         pendingRequests = []
+        outgoingPendingRequests = []
         myPersonalGoalMinutes = 0
         UserDefaults.standard.removeObject(forKey: AppConstants.Keys.myPersonalGoalMinutes)
         clearCache()

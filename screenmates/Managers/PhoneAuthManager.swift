@@ -83,3 +83,83 @@ class PhoneAuthManager: ObservableObject {
         return nil
     }
 }
+
+enum PhoneAuthProxyError: LocalizedError {
+    case missingWorkerURL
+    case invalidResponse
+    case server(String)
+    case verificationNotApproved
+
+    var errorDescription: String? {
+        switch self {
+        case .missingWorkerURL:
+            return "Phone verification is not configured yet."
+        case .invalidResponse:
+            return "The verification server returned an invalid response."
+        case .server(let message):
+            return message
+        case .verificationNotApproved:
+            return "That code didn't work. Please try again."
+        }
+    }
+}
+
+struct PhoneAuthProxyClient {
+    private struct VerificationRequest: Encodable {
+        let to: String
+        let code: String?
+    }
+
+    private struct VerificationResponse: Decodable {
+        let ok: Bool?
+        let sid: String?
+        let status: String?
+        let valid: Bool?
+        let error: String?
+    }
+
+    private var baseURL: URL {
+        get throws {
+            guard let url = URL(string: AppConstants.phoneAuthWorkerBaseURL),
+                  !AppConstants.phoneAuthWorkerBaseURL.isEmpty
+            else { throw PhoneAuthProxyError.missingWorkerURL }
+            return url
+        }
+    }
+
+    func startVerification(to e164: String) async throws {
+        _ = try await post("start-verification", body: VerificationRequest(to: e164, code: nil))
+    }
+
+    func checkVerification(to e164: String, code: String) async throws -> String {
+        let response = try await post("check-verification", body: VerificationRequest(to: e164, code: code))
+        guard response.valid == true || response.status == "approved" else {
+            throw PhoneAuthProxyError.verificationNotApproved
+        }
+        return response.sid ?? "twilio-\(PhoneAuthManager.sha256(e164).prefix(12))"
+    }
+
+    private func post(_ path: String, body: VerificationRequest) async throws -> VerificationResponse {
+        let url = try baseURL.appendingPathComponent(path)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (data, urlResponse) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = urlResponse as? HTTPURLResponse else {
+            throw PhoneAuthProxyError.invalidResponse
+        }
+
+        let decoded = try? JSONDecoder().decode(VerificationResponse.self, from: data)
+        if !(200..<300).contains(httpResponse.statusCode) {
+            throw PhoneAuthProxyError.server(decoded?.error ?? "Phone verification failed.")
+        }
+
+        guard let decoded else { throw PhoneAuthProxyError.invalidResponse }
+        if decoded.ok == false {
+            throw PhoneAuthProxyError.server(decoded.error ?? "Phone verification failed.")
+        }
+        return decoded
+    }
+}

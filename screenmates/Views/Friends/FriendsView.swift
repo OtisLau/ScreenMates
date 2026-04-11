@@ -3,6 +3,8 @@ import Contacts
 import CloudKit
 
 struct FriendsView: View {
+    private static let localPendingRequestsKey = "LocalOutgoingPendingFriendNames"
+
     @ObservedObject private var cloudManager = CloudKitManager.shared
     @Environment(\.dismiss) private var dismiss
 
@@ -13,6 +15,7 @@ struct FriendsView: View {
     @State private var isLoadingSuggestions = false
     @State private var pendingSuggestionIDs: Set<String> = []
     @State private var sendingSuggestionIDs: Set<String> = []
+    @State private var optimisticPendingFriendNames: [String: String] = [:]
     @State private var processingRequestIDs: Set<String> = []
     @State private var removingFriendIDs: Set<String> = []
     @State private var requestErrorMessage: String?
@@ -26,6 +29,13 @@ struct FriendsView: View {
         case sent
         case error(String)
         case alreadyFriends
+    }
+
+    private struct PendingFriendDisplay: Identifiable {
+        let userID: String
+        let displayName: String
+
+        var id: String { userID }
     }
 
     var body: some View {
@@ -146,8 +156,21 @@ struct FriendsView: View {
 
                 // Accepted friends
                 let acceptedFriends = cloudManager.friends.filter { $0.userID != cloudManager.myID }
-                if !acceptedFriends.isEmpty {
-                    Section("Friends (\(acceptedFriends.count))") {
+                let acceptedFriendIDs = Set(acceptedFriends.map(\.userID))
+                let cloudOutgoingPendingIDs = Set(cloudManager.outgoingPendingRequests.map(\.recipientUserID))
+                let cloudOutgoingPendingFriends = cloudManager.outgoingPendingRequests.compactMap { request -> PendingFriendDisplay? in
+                    guard !acceptedFriendIDs.contains(request.recipientUserID) else { return nil }
+                    return PendingFriendDisplay(userID: request.recipientUserID, displayName: request.recipientName)
+                }
+                let optimisticPendingFriends = optimisticPendingFriendNames.compactMap { userID, displayName -> PendingFriendDisplay? in
+                    guard !acceptedFriendIDs.contains(userID),
+                          !cloudOutgoingPendingIDs.contains(userID)
+                    else { return nil }
+                    return PendingFriendDisplay(userID: userID, displayName: displayName)
+                }
+                let outgoingPendingFriends = cloudOutgoingPendingFriends + optimisticPendingFriends
+                if !acceptedFriends.isEmpty || !outgoingPendingFriends.isEmpty {
+                    Section("Friends (\(acceptedFriends.count + outgoingPendingFriends.count))") {
                         ForEach(acceptedFriends) { friend in
                             HStack {
                                 Text(friend.displayName).font(.system(size: 15))
@@ -170,8 +193,18 @@ struct FriendsView: View {
                                 .disabled(removingFriendIDs.contains(friend.userID))
                             }
                         }
+                        ForEach(outgoingPendingFriends) { request in
+                            HStack {
+                                Text(request.displayName)
+                                    .font(.system(size: 15))
+                                Spacer()
+                                Text("Pending")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
-                } else if cloudManager.pendingRequests.isEmpty {
+                } else if cloudManager.pendingRequests.isEmpty && cloudManager.outgoingPendingRequests.isEmpty {
                     Section {
                         Text("No friends yet — share your code to get started.")
                             .foregroundStyle(.secondary)
@@ -215,10 +248,18 @@ struct FriendsView: View {
                 }
             }
             .onAppear {
+                loadLocalPendingFriends()
+                removeAcceptedLocalPendingFriends()
                 Task {
                     await cloudManager.fetchPendingRequests()
+                    await cloudManager.fetchOutgoingPendingRequests()
+                    await acceptReciprocalPendingRequests()
+                    reconcileLocalPendingFriends()
                     await loadSuggestions()
                 }
+            }
+            .onChange(of: cloudManager.friends.map(\.userID)) { _, _ in
+                reconcileLocalPendingFriends()
             }
             .alert("Friend request failed", isPresented: Binding(
                 get: { requestErrorMessage != nil },
@@ -242,10 +283,12 @@ struct FriendsView: View {
 
         // Filter out existing friends and self
         let friendIDs = Set(cloudManager.friends.map(\.userID))
-        let pendingIDs = Set(cloudManager.pendingRequests.map(\.requesterUserID))
+        let incomingPendingIDs = Set(cloudManager.pendingRequests.map(\.requesterUserID))
+        let outgoingPendingIDs = Set(cloudManager.outgoingPendingRequests.map(\.recipientUserID))
         let filtered = discovered.filter {
             !friendIDs.contains($0.userID) &&
-            !pendingIDs.contains($0.userID) &&
+            !incomingPendingIDs.contains($0.userID) &&
+            !outgoingPendingIDs.contains($0.userID) &&
             $0.userID != cloudManager.myID
         }
 
@@ -374,13 +417,41 @@ struct FriendsView: View {
         sendingSuggestionIDs.insert(suggestion.userID)
         defer { sendingSuggestionIDs.remove(suggestion.userID) }
 
+        var acceptedIncomingRequest = false
+        var shouldShowPending = true
         do {
             try await cloudManager.sendFriendRequest(toUserID: suggestion.userID)
-            pendingSuggestionIDs.insert(suggestion.userID)
+            acceptedIncomingRequest = try await cloudManager.acceptPendingIncomingFriendRequest(fromUserID: suggestion.userID)
+            shouldShowPending = !acceptedIncomingRequest
         } catch CloudKitManager.FriendError.alreadyExists {
-            pendingSuggestionIDs.insert(suggestion.userID)
+            do {
+                acceptedIncomingRequest = try await cloudManager.acceptPendingIncomingFriendRequest(fromUserID: suggestion.userID)
+                let alreadyFriends = try await cloudManager.hasAcceptedFriendship(withUserID: suggestion.userID)
+                shouldShowPending = !acceptedIncomingRequest && !alreadyFriends
+            } catch {
+                requestErrorMessage = friendRequestErrorMessage(from: error)
+                return
+            }
         } catch {
             requestErrorMessage = friendRequestErrorMessage(from: error)
+            return
+        }
+
+        if acceptedIncomingRequest {
+            optimisticPendingFriendNames.removeValue(forKey: suggestion.userID)
+            saveLocalPendingFriends()
+        } else if shouldShowPending {
+            pendingSuggestionIDs.insert(suggestion.userID)
+            markLocalPendingFriend(userID: suggestion.userID, displayName: suggestion.displayName)
+        } else {
+            optimisticPendingFriendNames.removeValue(forKey: suggestion.userID)
+            saveLocalPendingFriends()
+        }
+        suggestedFriends.removeAll { $0.userID == suggestion.userID }
+        Task {
+            await cloudManager.fetchPendingRequests()
+            await cloudManager.fetchOutgoingPendingRequests()
+            await cloudManager.refreshFriendsNow(reason: acceptedIncomingRequest ? "contact-accept" : "contact-request")
         }
     }
 
@@ -403,6 +474,10 @@ struct FriendsView: View {
             try await cloudManager.sendFriendRequest(toUserID: toUserID)
             lookupState = .sent
             addCode = ""
+            markLocalPendingFriend(userID: toUserID, displayName: displayName)
+            Task {
+                await cloudManager.fetchOutgoingPendingRequests()
+            }
             // Remove from suggestions if it was there
             await MainActor.run {
                 suggestedFriends.removeAll { $0.userID == toUserID }
@@ -412,5 +487,72 @@ struct FriendsView: View {
         } catch {
             lookupState = .error(error.localizedDescription)
         }
+    }
+
+    @MainActor
+    private func acceptReciprocalPendingRequests() async {
+        let incomingRequesterIDs = Set(cloudManager.pendingRequests.map(\.requesterUserID))
+        let reciprocalIDs = cloudManager.outgoingPendingRequests
+            .map(\.recipientUserID)
+            .filter { incomingRequesterIDs.contains($0) }
+
+        guard !reciprocalIDs.isEmpty else { return }
+
+        do {
+            for userID in reciprocalIDs {
+                _ = try await cloudManager.acceptPendingIncomingFriendRequest(fromUserID: userID)
+                optimisticPendingFriendNames.removeValue(forKey: userID)
+            }
+            saveLocalPendingFriends()
+            await cloudManager.fetchPendingRequests()
+            await cloudManager.fetchOutgoingPendingRequests()
+            await cloudManager.refreshFriendsNow(reason: "reciprocal-pending")
+        } catch {
+            requestErrorMessage = friendRequestErrorMessage(from: error)
+        }
+    }
+
+    private func loadLocalPendingFriends() {
+        guard let data = UserDefaults.standard.data(forKey: Self.localPendingRequestsKey),
+              let decoded = try? JSONDecoder().decode([String: String].self, from: data)
+        else { return }
+        optimisticPendingFriendNames = decoded
+    }
+
+    private func markLocalPendingFriend(userID: String, displayName: String) {
+        optimisticPendingFriendNames[userID] = displayName
+        saveLocalPendingFriends()
+    }
+
+    private func removeAcceptedLocalPendingFriends() {
+        let acceptedFriendIDs = Set(cloudManager.friends.map(\.userID))
+        let oldValue = optimisticPendingFriendNames
+        optimisticPendingFriendNames = optimisticPendingFriendNames.filter { userID, _ in
+            !acceptedFriendIDs.contains(userID)
+        }
+        if optimisticPendingFriendNames != oldValue {
+            saveLocalPendingFriends()
+        }
+    }
+
+    private func reconcileLocalPendingFriends() {
+        let acceptedFriendIDs = Set(cloudManager.friends.map(\.userID))
+        let cloudOutgoingPendingIDs = Set(cloudManager.outgoingPendingRequests.map(\.recipientUserID))
+        let oldValue = optimisticPendingFriendNames
+        optimisticPendingFriendNames = optimisticPendingFriendNames.filter { userID, _ in
+            !acceptedFriendIDs.contains(userID) && cloudOutgoingPendingIDs.contains(userID)
+        }
+        if optimisticPendingFriendNames != oldValue {
+            saveLocalPendingFriends()
+        }
+    }
+
+    private func saveLocalPendingFriends() {
+        if optimisticPendingFriendNames.isEmpty {
+            UserDefaults.standard.removeObject(forKey: Self.localPendingRequestsKey)
+            return
+        }
+        guard let data = try? JSONEncoder().encode(optimisticPendingFriendNames) else { return }
+        UserDefaults.standard.set(data, forKey: Self.localPendingRequestsKey)
     }
 }

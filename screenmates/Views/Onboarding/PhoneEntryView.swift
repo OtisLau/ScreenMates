@@ -3,7 +3,11 @@ import SwiftUI
 private struct PhoneButtonStyle: ViewModifier {
     let enabled: Bool
     func body(content: Content) -> some View {
-        enabled ? AnyView(content.glassProminentButtonStyle()) : AnyView(content.glassButtonStyle())
+        if enabled {
+            content.glassProminentButtonStyle()
+        } else {
+            content.glassButtonStyle()
+        }
     }
 }
 
@@ -202,9 +206,21 @@ struct PhoneEntryView: View {
             return
         }
 
-        // TODO: POST to Twilio proxy — /start-verification { to: e164 }
-        isLoading = false
-        step = .otp
+        Task {
+            do {
+                try await PhoneAuthProxyClient().startVerification(to: e164)
+                await MainActor.run {
+                    isLoading = false
+                    step = .otp
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
+            }
+        }
     }
 
     private func verifyCode() {
@@ -217,11 +233,18 @@ struct PhoneEntryView: View {
             return
         }
 
-        // TODO: POST to Twilio proxy — /check-verification { to: pendingE164, code: code }
-        // On success call PhoneAuthManager.shared.markPhoneVerified(e164:providerUserID:)
-        isLoading = false
-        errorMessage = "That code didn't work. Please try again."
-        showError = true
+        Task {
+            do {
+                let providerUserID = try await PhoneAuthProxyClient().checkVerification(to: pendingE164, code: code)
+                finishVerifiedPhone(providerUserID: providerUserID)
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
+            }
+        }
     }
 
     private func finishVerifiedPhone(providerUserID: String) {
