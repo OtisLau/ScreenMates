@@ -11,6 +11,8 @@ struct FriendsView: View {
     @State private var codeCopied = false
     @State private var suggestedFriends: [ContactMatch] = []
     @State private var isLoadingSuggestions = false
+    @State private var pendingSuggestionIDs: Set<String> = []
+    @State private var sendingSuggestionIDs: Set<String> = []
     @State private var processingRequestIDs: Set<String> = []
     @State private var removingFriendIDs: Set<String> = []
     @State private var requestErrorMessage: String?
@@ -194,11 +196,7 @@ struct FriendsView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Button("Add") {
-                                    Task { await sendRequest(toUserID: suggestion.userID, displayName: suggestion.displayName) }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.blue)
+                                suggestionActionButton(suggestion)
                             }
                         }
                     } header: {
@@ -288,6 +286,24 @@ struct FriendsView: View {
 
     // MARK: - Actions
 
+    @ViewBuilder
+    private func suggestionActionButton(_ suggestion: ContactMatch) -> some View {
+        if sendingSuggestionIDs.contains(suggestion.userID) {
+            ProgressView()
+                .controlSize(.small)
+        } else if pendingSuggestionIDs.contains(suggestion.userID) {
+            Text("Pending")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.secondary)
+        } else {
+            Button("Add") {
+                Task { await sendSuggestionRequest(to: suggestion) }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+        }
+    }
+
     private func requestActionButton(
         _ title: String,
         color: Color,
@@ -344,6 +360,25 @@ struct FriendsView: View {
 
         do {
             try await cloudManager.removeFriend(userID: friend.userID)
+        } catch {
+            requestErrorMessage = friendRequestErrorMessage(from: error)
+        }
+    }
+
+    @MainActor
+    private func sendSuggestionRequest(to suggestion: ContactMatch) async {
+        guard !sendingSuggestionIDs.contains(suggestion.userID),
+              !pendingSuggestionIDs.contains(suggestion.userID)
+        else { return }
+
+        sendingSuggestionIDs.insert(suggestion.userID)
+        defer { sendingSuggestionIDs.remove(suggestion.userID) }
+
+        do {
+            try await cloudManager.sendFriendRequest(toUserID: suggestion.userID)
+            pendingSuggestionIDs.insert(suggestion.userID)
+        } catch CloudKitManager.FriendError.alreadyExists {
+            pendingSuggestionIDs.insert(suggestion.userID)
         } catch {
             requestErrorMessage = friendRequestErrorMessage(from: error)
         }
