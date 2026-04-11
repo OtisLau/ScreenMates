@@ -281,6 +281,8 @@ class CloudKitManager: ObservableObject {
             record = CKRecord(recordType: "UserProfile", recordID: myUserProfileRecordID)
         }
 
+        let phoneHash = PhoneAuthManager.shared.phoneHash
+
         record["user_id"] = myID
         record["display_name"] = myDisplayName
         record["group_id"] = myGroupID
@@ -288,6 +290,7 @@ class CloudKitManager: ObservableObject {
         record["post_midnight_blocks"] = postMidnightBlocks
         record["last_updated"] = Date()
         record["last_active_date"] = Date()
+        if !phoneHash.isEmpty { record["phone_hash"] = phoneHash }
 
         do {
             _ = try await database.save(record)
@@ -301,6 +304,7 @@ class CloudKitManager: ObservableObject {
             latest["post_midnight_blocks"] = postMidnightBlocks
             latest["last_updated"] = Date()
             latest["last_active_date"] = Date()
+            if !phoneHash.isEmpty { latest["phone_hash"] = phoneHash }
             _ = try await database.save(latest)
         }
 
@@ -430,6 +434,23 @@ class CloudKitManager: ObservableObject {
         }
 
         return dedupeMembers(members)
+    }
+
+    // Fetch UserProfile records whose phone_hash matches any of the provided hashes.
+    // Used by ContactsPermissionView to discover which contacts are on ScreenMates.
+    func fetchUsersByPhoneHashes(_ hashes: [String]) async throws -> [(userID: String, displayName: String, phoneHash: String)] {
+        guard !hashes.isEmpty else { return [] }
+        let predicate = NSPredicate(format: "phone_hash IN %@", hashes)
+        let query = CKQuery(recordType: "UserProfile", predicate: predicate)
+        let (matchResults, _) = try await database.records(matching: query)
+        return matchResults.compactMap { _, result in
+            guard case .success(let record) = result,
+                  let userID      = record["user_id"]      as? String,
+                  let displayName = record["display_name"] as? String,
+                  let phoneHash   = record["phone_hash"]   as? String
+            else { return nil }
+            return (userID: userID, displayName: displayName, phoneHash: phoneHash)
+        }
     }
 
     // Remove old duplicate CloudKit records created by earlier builds or reinstalls

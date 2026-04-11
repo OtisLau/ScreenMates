@@ -6,6 +6,8 @@
 	<array>
 		<string>com.otishlau.screenmates.refresh</string>
 	</array>
+	<key>NSContactsUsageDescription</key>
+	<string>ScreenMates uses your contacts to find friends who are already on the app. Phone numbers are hashed before any comparison and are never stored in plain text.</string>
 	<key>NSFamilyControlsUsageDescription</key>
 	<string>ScreenMates uses Screen Time to measure your daily phone usage so you can compare it with friends and stay accountable together. No usage data is shared with anyone outside your group.</string>
 	<key>UIBackgroundModes</key>

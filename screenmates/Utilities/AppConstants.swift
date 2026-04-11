@@ -12,6 +12,11 @@ struct AppConstants {
     // Flip this to false before shipping to production.
     static let isTestMode = false
 
+    // MARK: - Phone Auth
+    // Accept any 6-digit code without calling Twilio. Flip to false once the
+    // Twilio proxy (Cloudflare Worker) is deployed and credentials are set.
+    static let skipOTPVerification = true
+
     // 0:00 -> 23:59 = 1439 total threshold minutes in a day.
     static let maxThresholdMinuteOfDay = (24 * 60) - 1
 
@@ -72,6 +77,13 @@ struct AppConstants {
         static let notificationsSentDate  = "NotificationsSentDate"
 
         static let monitoringSetupTimestamp = "MonitoringSetupTimestamp"
+
+        // Phone auth identity (stored in standard UserDefaults)
+        static let isPhoneVerified    = "IsPhoneVerified"
+        static let contactsHandled    = "ContactsHandled"
+        static let phoneNumberE164    = "PhoneNumberE164"
+        static let phoneHash          = "PhoneHash"
+        static let authProviderUserID = "AuthProviderUserID"
     }
 
     static func thresholdEventsPerDay(for blockSize: Int) -> Int {
