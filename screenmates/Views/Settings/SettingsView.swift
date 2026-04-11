@@ -5,6 +5,9 @@ struct SettingsView: View {
     @ObservedObject private var phoneAuth = PhoneAuthManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showingDebugMenu = false
+    @State private var showingDeactivateConfirmation = false
+    @State private var isDeactivating = false
+    @State private var deactivateError: String?
 
     @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
     @State private var notificationPermissionDenied = false
@@ -40,11 +43,15 @@ struct SettingsView: View {
             List {
                 // Identity
                 Section("Identity") {
-                    settingsRow(
-                        icon: "person",
-                        label: "Display Name",
-                        value: cloudManager.myDisplayName.isEmpty ? "Not set" : cloudManager.myDisplayName
-                    )
+                    NavigationLink {
+                        EditDisplayNameView(displayName: cloudManager.myDisplayName)
+                    } label: {
+                        settingsRow(
+                            icon: "person",
+                            label: "Display Name",
+                            value: cloudManager.myDisplayName.isEmpty ? "Not set" : cloudManager.myDisplayName
+                        )
+                    }
                 }
 
                 // Find Friends — only shown if contacts permission hasn't been handled yet.
@@ -166,6 +173,28 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                     }
                 }
+
+                Section {
+                    DisclosureGroup {
+                        Button(role: .destructive) {
+                            showingDeactivateConfirmation = true
+                        } label: {
+                            if isDeactivating {
+                                HStack(spacing: 12) {
+                                    ProgressView()
+                                    Text("Deactivating Account")
+                                }
+                            } else {
+                                actionRow(icon: "person.crop.circle.badge.xmark", label: "Deactivate Account")
+                            }
+                        }
+                        .disabled(isDeactivating)
+                    } label: {
+                        actionRow(icon: "ellipsis.circle", label: "Advanced")
+                    }
+                } footer: {
+                    Text("Deactivation removes your profile from ScreenMates and signs you out on this device.")
+                }
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
@@ -184,6 +213,44 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingDebugMenu) {
                 DebugMenuView()
+            }
+            .confirmationDialog(
+                "Deactivate account?",
+                isPresented: $showingDeactivateConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Deactivate Account", role: .destructive) {
+                    deactivateAccount()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes your ScreenMates profile and signs you out on this device. You will need to verify your phone number again to continue.")
+            }
+            .alert("Could Not Deactivate Account", isPresented: Binding(
+                get: { deactivateError != nil },
+                set: { if !$0 { deactivateError = nil } }
+            )) {
+                Button("OK") {}
+            } message: {
+                Text(deactivateError ?? "")
+            }
+        }
+    }
+
+    private func deactivateAccount() {
+        isDeactivating = true
+        Task {
+            do {
+                try await cloudManager.deactivateAccount()
+                await MainActor.run {
+                    isDeactivating = false
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isDeactivating = false
+                    deactivateError = error.localizedDescription
+                }
             }
         }
     }
@@ -210,6 +277,79 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
             Text(label)
+        }
+    }
+}
+
+private struct EditDisplayNameView: View {
+    @ObservedObject private var cloudManager = CloudKitManager.shared
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var displayName: String
+    @State private var isSaving = false
+
+    private var trimmedDisplayName: String {
+        displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasChanges: Bool {
+        trimmedDisplayName != cloudManager.myDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isNameValid: Bool {
+        !trimmedDisplayName.isEmpty && trimmedDisplayName.count <= 20
+    }
+
+    init(displayName: String) {
+        _displayName = State(initialValue: displayName)
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Your name", text: $displayName)
+                    .textInputAutocapitalization(.words)
+                    .disableAutocorrection(true)
+            } header: {
+                Text("Display Name")
+            } footer: {
+                HStack {
+                    Text("This is how you'll appear to your friends.")
+                    Spacer()
+                    Text("\(trimmedDisplayName.count)/20")
+                        .foregroundStyle(trimmedDisplayName.count > 20 ? Color.red : Color.secondary)
+                }
+            }
+        }
+        .navigationTitle("Edit Name")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+                    .disabled(isSaving)
+            }
+
+            ToolbarItem(placement: .confirmationAction) {
+                Button(isSaving ? "Saving..." : "Save") {
+                    saveDisplayName()
+                }
+                .disabled(!isNameValid || !hasChanges || isSaving)
+            }
+        }
+    }
+
+    private func saveDisplayName() {
+        guard isNameValid, hasChanges else { return }
+
+        isSaving = true
+        cloudManager.myDisplayName = trimmedDisplayName
+        cloudManager.usernameSet = true
+        cloudManager.updateMyProfile {
+            Task { @MainActor in
+                isSaving = false
+                dismiss()
+                await cloudManager.refreshFriendsNow(reason: "display-name")
+            }
         }
     }
 }

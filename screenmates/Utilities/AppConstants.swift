@@ -1,6 +1,6 @@
 import Foundation
 
-struct AppConstants {
+nonisolated struct AppConstants {
 
     // MARK: - App Group
     static let appGroupSuite = "group.com.otishlau.screenmates"

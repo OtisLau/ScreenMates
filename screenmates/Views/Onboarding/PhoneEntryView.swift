@@ -19,6 +19,8 @@ struct PhoneEntryView: View {
     @State private var pendingE164 = ""
     @State private var isLoading = false
     @State private var showError = false
+    @State private var errorMessage = "That code didn't work. Please try again."
+    @State private var statusMessage = ""
 
     @FocusState private var isFocused: Bool
 
@@ -138,6 +140,15 @@ struct PhoneEntryView: View {
                     .padding(.vertical, 18)
                     .glassCard(cornerRadius: AppTheme.cornerRadiusLarge)
                     .padding(.horizontal, 24)
+
+                if !statusMessage.isEmpty {
+                    Text(statusMessage)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
             }
 
             Spacer()
@@ -174,7 +185,7 @@ struct PhoneEntryView: View {
         .alert("Invalid Code", isPresented: $showError) {
             Button("OK") {}
         } message: {
-            Text("That code didn't work. Please try again.")
+            Text(errorMessage)
         }
     }
 
@@ -198,21 +209,55 @@ struct PhoneEntryView: View {
 
     private func verifyCode() {
         isLoading = true
+        statusMessage = ""
 
         if AppConstants.skipOTPVerification {
             // In bypass mode any 6-digit code is accepted.
-            PhoneAuthManager.shared.markPhoneVerified(
-                e164: pendingE164,
-                providerUserID: "bypass-\(UUID().uuidString.prefix(8))"
-            )
-            isLoading = false
+            finishVerifiedPhone(providerUserID: "bypass-\(UUID().uuidString.prefix(8))")
             return
         }
 
         // TODO: POST to Twilio proxy — /check-verification { to: pendingE164, code: code }
         // On success call PhoneAuthManager.shared.markPhoneVerified(e164:providerUserID:)
         isLoading = false
+        errorMessage = "That code didn't work. Please try again."
         showError = true
+    }
+
+    private func finishVerifiedPhone(providerUserID: String) {
+        Task {
+            let phoneHash = PhoneAuthManager.sha256(pendingE164)
+            let restoredAccount: CloudKitManager.RestoredAccount?
+            do {
+                restoredAccount = try await CloudKitManager.shared.restoreExistingAccount(
+                    phoneHash: phoneHash,
+                    providerUserID: providerUserID
+                )
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = "We couldn't check for an existing account. Please try again."
+                    showError = true
+                }
+                return
+            }
+
+            if let restoredAccount, !restoredAccount.displayName.isEmpty {
+                await MainActor.run {
+                    statusMessage = "Welcome back, \(restoredAccount.displayName)"
+                }
+                try? await Task.sleep(nanoseconds: 700_000_000)
+            }
+
+            await MainActor.run {
+                PhoneAuthManager.shared.markPhoneVerified(
+                    e164: pendingE164,
+                    providerUserID: providerUserID,
+                    syncProfile: restoredAccount == nil
+                )
+                isLoading = false
+            }
+        }
     }
 
     // MARK: - Helpers

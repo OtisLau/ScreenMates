@@ -200,11 +200,8 @@ struct OnboardingView: View {
     private func startMonitoring() {
         cloudManager.isSetupDone = true
 
-        Task {
-            await Task.detached(priority: .userInitiated) {
-                MonitoringManager.shared.restartMonitoring()
-            }.value
-
+        MonitoringManager.shared.restartMonitoringInBackground(priority: .userInitiated)
+        Task(priority: .utility) {
             await CloudKitManager.shared.refreshFriendsNow(reason: "setup")
         }
     }

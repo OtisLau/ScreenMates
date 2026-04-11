@@ -4,7 +4,7 @@ import FamilyControls
 
 // Handles saving the app selection from onboarding and restarting monitoring mid-session.
 // Useful in test mode when the current event batch is exhausted and you need to keep testing.
-class MonitoringManager {
+nonisolated class MonitoringManager {
     static let shared = MonitoringManager()
     private init() {}
 
@@ -40,6 +40,13 @@ class MonitoringManager {
         return (selection.applicationTokens.count,
                 selection.categoryTokens.count,
                 selection.webDomainTokens.count)
+    }
+
+    // Re-register monitoring with a completely fresh batch of events starting from block_1.
+    func restartMonitoringInBackground(priority: TaskPriority = .utility) {
+        Task.detached(priority: priority) {
+            MonitoringManager.shared.restartMonitoring()
+        }
     }
 
     // Re-register monitoring with a completely fresh batch of events starting from block_1.

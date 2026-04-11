@@ -13,6 +13,10 @@ import WidgetKit
 class CloudKitManager: ObservableObject {
     static let shared = CloudKitManager()
 
+    struct RestoredAccount {
+        let displayName: String
+    }
+
     // MARK: - CloudKit
     let container = CKContainer(identifier: AppConstants.cloudKitContainerID)
     lazy var database = container.publicCloudDatabase
@@ -104,6 +108,7 @@ class CloudKitManager: ObservableObject {
         }
 
         let phoneHash = PhoneAuthManager.shared.phoneHash
+        let authProviderUserID = PhoneAuthManager.shared.authProviderUserID
 
         record["user_id"]               = myID
         record["display_name"]          = myDisplayName
@@ -113,6 +118,10 @@ class CloudKitManager: ObservableObject {
         record["last_active_date"]      = Date()
         record["personal_goal_minutes"] = myPersonalGoalMinutes
         if !phoneHash.isEmpty { record["phone_hash"] = phoneHash }
+        if !authProviderUserID.isEmpty {
+            record["auth_provider_user_id"] = authProviderUserID
+            record["phone_verified_at"] = Date()
+        }
 
         do {
             _ = try await database.save(record)
@@ -126,6 +135,10 @@ class CloudKitManager: ObservableObject {
             latest["last_active_date"]      = Date()
             latest["personal_goal_minutes"] = myPersonalGoalMinutes
             if !phoneHash.isEmpty { latest["phone_hash"] = phoneHash }
+            if !authProviderUserID.isEmpty {
+                latest["auth_provider_user_id"] = authProviderUserID
+                latest["phone_verified_at"] = Date()
+            }
             _ = try await database.save(latest)
         }
 
@@ -150,6 +163,61 @@ class CloudKitManager: ObservableObject {
             }
             completion?()
         }
+    }
+
+    @MainActor
+    func restoreExistingAccount(phoneHash: String, providerUserID: String) async throws -> RestoredAccount? {
+        guard !phoneHash.isEmpty else { return nil }
+
+        let predicate = NSPredicate(format: "phone_hash == %@", phoneHash)
+        let query = CKQuery(recordType: "UserProfile", predicate: predicate)
+
+        let (results, _) = try await database.records(matching: query, resultsLimit: 1)
+        guard let record = results.compactMap({ _, result in
+            if case .success(let record) = result { return record }
+            return nil
+        }).first else {
+            return nil
+        }
+
+        let restoredID = record["user_id"] as? String ?? record.recordID.recordName
+        let restoredName = record["display_name"] as? String ?? ""
+        let restoredGoal = record["personal_goal_minutes"] as? Int ?? 0
+
+        myID = restoredID
+        KeychainStore.saveStableUserID(restoredID)
+        myDisplayName = restoredName
+        usernameSet = !restoredName.isEmpty
+        myPersonalGoalMinutes = restoredGoal
+        UserDefaults.standard.set(restoredGoal, forKey: AppConstants.Keys.myPersonalGoalMinutes)
+
+        record["user_id"]               = restoredID
+        record["auth_provider_user_id"] = providerUserID
+        record["phone_verified_at"]     = Date()
+        record["last_active_date"]      = Date()
+        record["phone_hash"]            = phoneHash
+        _ = try await database.save(record)
+
+        mirrorIdentityToAppGroup()
+        lastSyncTime = Date()
+
+        return RestoredAccount(displayName: restoredName)
+    }
+
+    @MainActor
+    func deactivateAccount() async throws {
+        let userID = myID
+        let profileID = myUserProfileRecordID
+
+        try await markFriendshipsRemoved(for: userID)
+
+        do {
+            try await database.deleteRecord(withID: profileID)
+        } catch let error as CKError where error.code == .unknownItem {
+            print("UserProfile already deleted")
+        }
+
+        resetLocalAccountState(regenerateUserID: true)
     }
 
     // MARK: - Personal Goal
@@ -485,6 +553,27 @@ class CloudKitManager: ObservableObject {
         }
     }
 
+    private func markFriendshipsRemoved(for userID: String) async throws {
+        let sentQuery = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "requester_user_id == %@", userID))
+        let receivedQuery = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "recipient_user_id == %@", userID))
+
+        let (sentResults, _) = try await database.records(matching: sentQuery)
+        let (receivedResults, _) = try await database.records(matching: receivedQuery)
+        let records = (sentResults + receivedResults).compactMap { _, result in
+            if case .success(let record) = result { return record }
+            return nil
+        }
+
+        for record in records {
+            guard record["status"] as? String != "removed" else { continue }
+            record["status"] = "removed"
+            record["updated_at"] = Date()
+            _ = try await database.save(record)
+        }
+    }
+
     // MARK: - Duplicate Cleanup
 
     private func cleanupMyDuplicateProfiles() async throws {
@@ -634,6 +723,16 @@ class CloudKitManager: ObservableObject {
     }
 
     func resetAllData() {
+        resetLocalAccountState(regenerateUserID: false)
+        print("🗑️ All data reset")
+    }
+
+    private func resetLocalAccountState(regenerateUserID: Bool) {
+        if regenerateUserID {
+            KeychainStore.deleteStableUserID()
+            myID = KeychainStore.getOrCreateStableUserID()
+        }
+
         myGroupID = ""
         myDisplayName = ""
         isSetupDone = false
@@ -645,7 +744,8 @@ class CloudKitManager: ObservableObject {
         clearCache()
         sharedDefaults?.removeObject(forKey: AppConstants.Keys.dailyBlocksUsed)
         sharedDefaults?.removeObject(forKey: AppConstants.Keys.lastBlockDate)
-        print("🗑️ All data reset")
+        PhoneAuthManager.shared.resetAuthState()
+        mirrorIdentityToAppGroup()
     }
 
     // MARK: - Legacy Group Methods (kept for debug/settings compatibility — Task 4 removes these)

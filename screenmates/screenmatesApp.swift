@@ -27,9 +27,10 @@ struct ScreenMatesApp: App {
 
             // Fetch friends leaderboard and evaluate notifications in background
             if let members = try? await cloudManager.fetchFriendsAsync() {
-                NotificationManager.shared.evaluateAndSchedule(
+                let myUserID = await MainActor.run { cloudManager.myID }
+                await NotificationManager.shared.evaluateAndSchedule(
                     members: members,
-                    myUserID: cloudManager.myID
+                    myUserID: myUserID
                 )
             }
 
@@ -43,21 +44,21 @@ struct ScreenMatesApp: App {
     }
     
     // Debounce concurrent calls (e.g. background task + foreground activation).
-    private static var lastRestartDate: Date = .distantPast
+    nonisolated(unsafe) private static var lastRestartDate: Date = .distantPast
+    nonisolated private static let restartStateQueue = DispatchQueue(label: "com.otishlau.screenmates.monitoringRestartState")
 
     // Check that DeviceActivity monitoring is running and the current batch isn't
     // exhausted. Called on every foreground activation and background task wake.
     private func ensureMonitoringActive(context: String) {
-        // Skip if we already restarted within the last 5 seconds to prevent
-        // concurrent foreground + background calls from double-restarting.
-        guard Date().timeIntervalSince(Self.lastRestartDate) > 5 else {
-            print(" Skipping ensureMonitoringActive (\(context)) — restart still settling")
-            return
+        Task.detached(priority: .utility) {
+            Self.ensureMonitoringActiveInBackground(context: context)
         }
+    }
 
+    nonisolated private static func ensureMonitoringActiveInBackground(context: String) {
         if MonitoringManager.shared.performHardDayRolloverResetIfNeeded() {
+            guard reserveRestartSlotIfNeeded(context: context) else { return }
             print(" New day detected (\(context)) — rolling over and restarting monitoring")
-            Self.lastRestartDate = Date()
             MonitoringManager.shared.restartMonitoring()
             return
         }
@@ -67,8 +68,8 @@ struct ScreenMatesApp: App {
         let activities = DeviceActivityCenter().activities
 
         guard activities.contains(DeviceActivityName("dailyTracking")) else {
+            guard reserveRestartSlotIfNeeded(context: context) else { return }
             print(" Monitoring dead (\(context)) — auto-restarting")
-            Self.lastRestartDate = Date()
             MonitoringManager.shared.restartMonitoring()
             return
         }
@@ -80,11 +81,24 @@ struct ScreenMatesApp: App {
             lastIndex < AppConstants.maxTrackableBlocksPerDay
 
         if exhaustedBatch && lastAutoRollover != lastIndex {
+            guard reserveRestartSlotIfNeeded(context: context) else { return }
             print(" Batch exhausted at block_\(lastIndex) (\(context)) — rolling over")
             sharedDefaults?.set(lastIndex, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-            Self.lastRestartDate = Date()
             MonitoringManager.shared.restartMonitoring()
         }
+    }
+
+    nonisolated private static func reserveRestartSlotIfNeeded(context: String) -> Bool {
+        let reserved = restartStateQueue.sync {
+            let now = Date()
+            guard now.timeIntervalSince(Self.lastRestartDate) > 5 else { return false }
+            Self.lastRestartDate = now
+            return true
+        }
+        if !reserved {
+            print(" Skipping ensureMonitoringActive (\(context)) — restart still settling")
+        }
+        return reserved
     }
 
     private func scheduleBackgroundRefresh() {

@@ -45,6 +45,15 @@ enum KeychainStore {
         }
     }
 
+    static func deleteStableUserID() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: accountUserID
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
     static func getOrCreateStableUserID() -> String {
         if let existing = loadStableUserID(), !existing.isEmpty {
             return existing
@@ -55,5 +64,4 @@ enum KeychainStore {
         return created
     }
 }
-
 

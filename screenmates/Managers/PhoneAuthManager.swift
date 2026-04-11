@@ -26,7 +26,7 @@ class PhoneAuthManager: ObservableObject {
 
     /// Call this once OTP verification succeeds. Persists identity locally
     /// and writes phone_hash to CloudKit via CloudKitManager.updateMyProfile.
-    func markPhoneVerified(e164: String, providerUserID: String) {
+    func markPhoneVerified(e164: String, providerUserID: String, syncProfile: Bool = true) {
         let hash = Self.sha256(e164)
         phoneNumberE164    = e164
         phoneHash          = hash
@@ -40,13 +40,29 @@ class PhoneAuthManager: ObservableObject {
 
         // Push phone_hash to the user's CloudKit UserProfile so friends can discover them.
         // CloudKitManager.saveProfileToCloud reads PhoneAuthManager.shared.phoneHash directly.
-        CloudKitManager.shared.updateMyProfile(completion: nil)
+        if syncProfile {
+            CloudKitManager.shared.updateMyProfile(completion: nil)
+        }
     }
 
     /// Call after contacts permission is handled (granted or explicitly skipped).
     func markContactsHandled() {
         contactsHandled = true
         defaults.set(true, forKey: AppConstants.Keys.contactsHandled)
+    }
+
+    func resetAuthState() {
+        isPhoneVerified    = false
+        contactsHandled    = false
+        phoneNumberE164    = ""
+        phoneHash          = ""
+        authProviderUserID = ""
+
+        defaults.removeObject(forKey: AppConstants.Keys.phoneNumberE164)
+        defaults.removeObject(forKey: AppConstants.Keys.phoneHash)
+        defaults.removeObject(forKey: AppConstants.Keys.authProviderUserID)
+        defaults.set(false, forKey: AppConstants.Keys.isPhoneVerified)
+        defaults.set(false, forKey: AppConstants.Keys.contactsHandled)
     }
 
     // MARK: - Helpers
