@@ -4,7 +4,6 @@ import UserNotifications
 class NotificationManager {
     static let shared = NotificationManager()
     private init() {
-        // Register default so existing users have notifications enabled
         UserDefaults.standard.register(defaults: ["notificationsEnabled": true])
     }
 
@@ -15,7 +14,7 @@ class NotificationManager {
             return try await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound])
         } catch {
-            print(" Notification permission request failed: \(error.localizedDescription)")
+            print("❌ Notification permission request failed: \(error.localizedDescription)")
             return false
         }
     }
@@ -29,37 +28,32 @@ class NotificationManager {
 
     // MARK: - Evaluate & Schedule
 
-    // Called after every group data refresh. Checks all three scenarios
-    // and schedules notifications if conditions are met.
-    func evaluateAndSchedule(
-        groupMembers: [MemberData],
-        myUserID: String,
-        goalMinutes: Int
-    ) {
-        // Respect user toggle
+    // Called after every friends refresh. Each member's usage is checked against
+    // their own personal limit — no shared group goal.
+    func evaluateAndSchedule(members: [MemberData], myUserID: String) {
         guard UserDefaults.standard.bool(forKey: "notificationsEnabled") else { return }
-        guard !groupMembers.isEmpty else { return }
+        guard !members.isEmpty else { return }
 
         Task {
             guard await isAuthorized else { return }
-
             cleanupSentKeysIfNewDay()
-
-            if goalMinutes > 0 {
-                scheduleOverLimitNotifications(members: groupMembers, goalMinutes: goalMinutes)
-                scheduleEndOfDaySummary(members: groupMembers, goalMinutes: goalMinutes)
-            }
-            scheduleMorningDoomScroll(members: groupMembers)
+            scheduleOverLimitNotifications(members: members)
+            scheduleEndOfDaySummary(members: members)
+            scheduleMorningDoomScroll(members: members)
         }
     }
 
     // MARK: - Scenario 1: Over Limit (immediate)
 
-    private func scheduleOverLimitNotifications(members: [MemberData], goalMinutes: Int) {
+    // Fires when any friend exceeds their own personal limit.
+    // Skips members whose limit is 0 (no limit set).
+    private func scheduleOverLimitNotifications(members: [MemberData]) {
         let today = todayString()
 
         for member in members {
-            guard member.minutesUsed > goalMinutes else { continue }
+            let limit = member.personalGoalMinutes
+            guard limit > 0 else { continue }
+            guard member.minutesUsed > limit else { continue }
 
             let dedupKey = "overLimit-\(member.userID)-\(today)"
             guard !hasAlreadySent(key: dedupKey) else { continue }
@@ -67,7 +61,7 @@ class NotificationManager {
             let copy = NotificationCopy.randomOverLimit(
                 name: member.displayName,
                 usedMinutes: member.minutesUsed,
-                goalMinutes: goalMinutes
+                goalMinutes: limit
             )
             let content = UNMutableNotificationContent()
             content.title = copy.title
@@ -77,9 +71,8 @@ class NotificationManager {
             let request = UNNotificationRequest(
                 identifier: dedupKey,
                 content: content,
-                trigger: nil // deliver immediately
+                trigger: nil
             )
-
             UNUserNotificationCenter.current().add(request)
             markSent(key: dedupKey)
         }
@@ -87,25 +80,25 @@ class NotificationManager {
 
     // MARK: - Scenario 2: End of Day Summary (10 PM)
 
-    private func scheduleEndOfDaySummary(members: [MemberData], goalMinutes: Int) {
+    // Pick the worst offender across all friends who have a limit and are 1h+ over it.
+    private func scheduleEndOfDaySummary(members: [MemberData]) {
         let today = todayString()
         let dedupKey = "endOfDay-\(today)"
         guard !hasAlreadySent(key: dedupKey) else { return }
 
         let hour = Calendar.current.component(.hour, from: Date())
-        // Only schedule/send after 10 PM
         guard hour >= 22 else { return }
 
-        // Find members who are 1h+ over the limit
-        let overBy60 = members.filter { $0.minutesUsed >= goalMinutes + 60 }
+        let overBy60 = members.filter { m in
+            m.personalGoalMinutes > 0 && m.minutesUsed >= m.personalGoalMinutes + 60
+        }
         guard !overBy60.isEmpty else { return }
 
-        // Pick the worst offender for the notification
         let worst = overBy60.max(by: { $0.minutesUsed < $1.minutesUsed })!
         let copy = NotificationCopy.randomEndOfDay(
             name: worst.displayName,
             usedMinutes: worst.minutesUsed,
-            goalMinutes: goalMinutes
+            goalMinutes: worst.personalGoalMinutes
         )
 
         let content = UNMutableNotificationContent()
@@ -113,12 +106,7 @@ class NotificationManager {
         content.body = copy.body
         content.sound = .default
 
-        let request = UNNotificationRequest(
-            identifier: dedupKey,
-            content: content,
-            trigger: nil // deliver immediately since we're already past 10 PM
-        )
-
+        let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
         markSent(key: dedupKey)
     }
@@ -128,11 +116,8 @@ class NotificationManager {
     private func scheduleMorningDoomScroll(members: [MemberData]) {
         let today = todayString()
         let hour = Calendar.current.component(.hour, from: Date())
-
-        // Between 6 AM and noon, check for late-night usage
         guard hour >= 6 && hour < 12 else { return }
 
-        // Minimum 1.5h of post-midnight usage to trigger
         let minBlocks = max(1, Int(ceil(90.0 / Double(AppConstants.currentBlockSize))))
         let doomScrollers = members.filter { $0.postMidnightBlocks >= minBlocks }
         guard !doomScrollers.isEmpty else { return }
@@ -151,9 +136,8 @@ class NotificationManager {
             content.body = copy.body
             content.sound = .default
 
-            // If before 9:30 AM, schedule for 9:30 AM. Otherwise deliver immediately.
-            let trigger: UNNotificationTrigger?
             let minute = Calendar.current.component(.minute, from: Date())
+            let trigger: UNNotificationTrigger?
             if hour < 9 || (hour == 9 && minute < 30) {
                 var dateComponents = DateComponents()
                 dateComponents.hour = 9
@@ -163,12 +147,7 @@ class NotificationManager {
                 trigger = nil
             }
 
-            let request = UNNotificationRequest(
-                identifier: dedupKey,
-                content: content,
-                trigger: trigger
-            )
-
+            let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: trigger)
             UNUserNotificationCenter.current().add(request)
             markSent(key: dedupKey)
         }
@@ -178,9 +157,9 @@ class NotificationManager {
 
     private func todayString() -> String {
         let components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-        let year = components.year ?? 0
+        let year  = components.year  ?? 0
         let month = components.month ?? 0
-        let day = components.day ?? 0
+        let day   = components.day   ?? 0
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
@@ -196,7 +175,6 @@ class NotificationManager {
         UserDefaults.standard.set(todayString(), forKey: AppConstants.Keys.notificationsSentDate)
     }
 
-    // Clear sent keys when a new day starts
     private func cleanupSentKeysIfNewDay() {
         let lastDate = UserDefaults.standard.string(forKey: AppConstants.Keys.notificationsSentDate) ?? ""
         if lastDate != todayString() {

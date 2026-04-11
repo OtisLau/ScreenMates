@@ -212,7 +212,7 @@ struct OnboardingView: View {
                 MonitoringManager.shared.restartMonitoring()
             }.value
 
-            await CloudKitManager.shared.refreshGroupNow(reason: "setup")
+            await CloudKitManager.shared.refreshFriendsNow(reason: "setup")
         }
     }
 }

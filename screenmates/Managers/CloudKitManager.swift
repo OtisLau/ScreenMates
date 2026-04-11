@@ -8,8 +8,8 @@ import UIKit
 import WidgetKit
 #endif
 
-// Handles everything CloudKit: saving your profile, fetching your group's data,
-// background sync, and real-time push subscriptions.
+// Handles everything CloudKit: saving your profile, fetching friends' data,
+// background sync, and friend request management.
 class CloudKitManager: ObservableObject {
     static let shared = CloudKitManager()
 
@@ -18,22 +18,28 @@ class CloudKitManager: ObservableObject {
     lazy var database = container.publicCloudDatabase
 
     // MARK: - Who am I?
-    // These are persisted across app launches via @AppStorage (UserDefaults).
     @AppStorage("my_user_id") var myID: String = ""
     @AppStorage("my_display_name") var myDisplayName: String = ""
     @AppStorage("my_group_id") var myGroupID: String = ""
     @AppStorage("is_setup_done") var isSetupDone: Bool = false
     @AppStorage("username_set") var usernameSet: Bool = false
 
-    // Shared group daily limit — synced from the SocialGroup CloudKit record.
-    @Published var groupGoalMinutes: Int = 0
-    private var lastGoalUpdateTime: Date = .distantPast
+    // Personal daily limit — stored locally and synced to/from UserProfile.personal_goal_minutes.
+    @Published var myPersonalGoalMinutes: Int = 0
 
-    // Tracks which group we last subscribed to so we don't re-subscribe every launch
-    @AppStorage("last_subscription_group_id") private var lastSubscriptionGroupID: String = ""
+    // Backward-compat alias so settings/debug views that still read groupGoalMinutes compile.
+    var groupGoalMinutes: Int { myPersonalGoalMinutes }
+
+    // Friends leaderboard — current user + accepted friends, sorted by usage descending.
+    @Published var friends: [MemberData] = []
+
+    // Backward-compat alias — debug/diagnostic views still read groupMembers.
+    var groupMembers: [MemberData] { friends }
+
+    // Pending incoming friend requests (status == pending, recipient == me).
+    @Published var pendingRequests: [FriendRequest] = []
 
     // MARK: - UI State
-    @Published var groupMembers: [MemberData] = []
     @Published var isLoading = false
     @Published var lastError: ErrorHandler.AppError?
     @Published var lastSyncTime: Date?
@@ -46,224 +52,40 @@ class CloudKitManager: ObservableObject {
     private static let jsonDecoder = JSONDecoder()
 
     // Throttle widget timeline reloads to avoid OOM-killing the widget process.
-    // Use a faster cadence while app is active and a slower one in background.
     private var lastWidgetReload: Date = .distantPast
-    private let widgetReloadThrottleForeground: TimeInterval = 30        // 30 seconds
-    private let widgetReloadThrottleBackground: TimeInterval = 15 * 60   // 15 minutes
+    private let widgetReloadThrottleForeground: TimeInterval = 30
+    private let widgetReloadThrottleBackground: TimeInterval = 15 * 60
 
     // The CloudKit record ID for this user — always the same so we never create duplicates.
-    // Computed lazily from myID; CKRecord.ID is cheap but no need to reallocate on every access.
     private var myUserProfileRecordID: CKRecord.ID {
         CKRecord.ID(recordName: myID)
     }
 
+    // MARK: - Friend Code
+
+    // Short shareable code derived from the user's ID — first 6 hex chars, uppercased.
+    // e.g. user_id "550e8400-e29b-..." → "550E84"
+    var myFriendCode: String {
+        String(myID.prefix(6)).uppercased()
+    }
+
     private init() {
-        // On first launch, generate a stable user ID stored in Keychain.
-        // This survives app reinstalls so the same person never gets two CloudKit records.
         if myID.isEmpty {
             myID = KeychainStore.getOrCreateStableUserID()
         } else {
             KeychainStore.saveStableUserID(myID)
         }
 
+        myPersonalGoalMinutes = UserDefaults.standard.integer(forKey: AppConstants.Keys.myPersonalGoalMinutes)
         loadCachedData()
         mirrorIdentityToAppGroup()
-        groupGoalMinutes = UserDefaults.standard.integer(forKey: "cached_group_goal_minutes")
     }
 
-    // Copy identity and config into shared App Group storage so the background extension can read it
-    // (extensions can't access @AppStorage or AppConstants from the main app target directly).
     private func mirrorIdentityToAppGroup() {
         sharedDefaults?.set(myID, forKey: AppConstants.Keys.sharedUserID)
         sharedDefaults?.set(myDisplayName, forKey: AppConstants.Keys.sharedDisplayName)
-        sharedDefaults?.set(myGroupID, forKey: AppConstants.Keys.sharedGroupID)
         sharedDefaults?.set(AppConstants.currentBlockSize, forKey: AppConstants.Keys.sharedBlockSizeMinutes)
-        sharedDefaults?.set(groupGoalMinutes, forKey: AppConstants.Keys.sharedGoalMinutes)
-    }
-
-    // MARK: - CloudKit Subscriptions
-
-    // Set up a silent push subscription so when any group member updates their data,
-    // all other devices get woken up to refresh — without anyone needing to open the app.
-    func ensureGroupSubscription() {
-        guard !myGroupID.isEmpty else { return }
-        guard myGroupID != lastSubscriptionGroupID else { return }
-
-        let newGroupID = myGroupID
-
-        // Delete the old subscription first so stale silent pushes stop arriving for
-        // groups the user has left. CloudKit caps subscriptions at 400; orphaned ones
-        // accumulate silently across group changes and reinstalls.
-        if !lastSubscriptionGroupID.isEmpty {
-            let oldSubscriptionID = "group-userprofile-\(lastSubscriptionGroupID)"
-            database.delete(withSubscriptionID: oldSubscriptionID) { [weak self] _, error in
-                if let error {
-                    print(" Failed to delete old subscription '\(oldSubscriptionID)': \(error.localizedDescription)")
-                } else {
-                    print(" Deleted old subscription for group \(self?.lastSubscriptionGroupID ?? "")")
-                }
-            }
-        }
-
-        let subscriptionID = "group-userprofile-\(newGroupID)"
-        let predicate = NSPredicate(format: "group_id == %@", newGroupID)
-
-        let subscription = CKQuerySubscription(
-            recordType: "UserProfile",
-            predicate: predicate,
-            subscriptionID: subscriptionID,
-            options: [.firesOnRecordCreation, .firesOnRecordUpdate, .firesOnRecordDeletion]
-        )
-
-        // Silent push = wakes the app in the background without showing a notification to the user
-        let info = CKSubscription.NotificationInfo()
-        info.shouldSendContentAvailable = true
-        subscription.notificationInfo = info
-
-        database.save(subscription) { [weak self] _, error in
-            if let error {
-                print(" CloudKit subscription failed: \(error.localizedDescription)")
-                return
-            }
-            print(" Subscribed to group \(newGroupID)")
-            DispatchQueue.main.async { [weak self] in
-                self?.lastSubscriptionGroupID = newGroupID
-            }
-        }
-    }
-
-    // MARK: - Group Management
-
-    // Create a new group and save it to CloudKit. Returns the 6-char group code.
-    func createGroup(completion: @escaping (Result<String, ErrorHandler.AppError>) -> Void) {
-        let newGroupID = UUID().uuidString.prefix(6).uppercased()
-        let group = SocialGroup(recordID: CKRecord.ID(recordName: newGroupID), groupID: newGroupID)
-        let record = group.toCKRecord()
-
-        isLoading = true
-
-        database.save(record) { [weak self] _, error in
-            guard let self else { return }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.isLoading = false
-
-                if let error = error {
-                    let appError = self.handleCloudKitError(error)
-                    self.lastError = appError
-                    completion(.failure(appError))
-                } else {
-                    self.myGroupID = newGroupID
-                    self.mirrorIdentityToAppGroup()
-                    self.updateMyProfile()
-                    completion(.success(newGroupID))
-                }
-            }
-        }
-    }
-
-    // Check that a group code actually exists in CloudKit before letting someone join
-    func validateGroup(_ groupID: String, completion: @escaping (Result<SocialGroup, ErrorHandler.AppError>) -> Void) {
-        isLoading = true
-
-        let predicate = NSPredicate(format: "group_id == %@", groupID)
-        let query = CKQuery(recordType: "SocialGroup", predicate: predicate)
-
-        database.fetch(withQuery: query, inZoneWith: nil, resultsLimit: 1) { [weak self] result in
-            guard let self else { return }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.isLoading = false
-
-                switch result {
-                case .success(let (matchResults, _)):
-                    if let firstMatch = matchResults.first,
-                       case .success(let record) = firstMatch.1,
-                       let group = SocialGroup.from(record) {
-                        completion(.success(group))
-                    } else {
-                        self.lastError = .groupNotFound
-                        completion(.failure(.groupNotFound))
-                    }
-                case .failure(let error):
-                    let appError = self.handleCloudKitError(error)
-                    self.lastError = appError
-                    completion(.failure(appError))
-                }
-            }
-        }
-    }
-
-    // Join a group: save the group ID locally, sync to the extension, subscribe to updates
-    func joinGroup(groupID: String) {
-        myGroupID = groupID
-        mirrorIdentityToAppGroup()
-        ensureGroupSubscription()
-        updateMyProfile()
-    }
-
-    // Leave the current group and wipe all local state
-    func leaveGroup() {
-        myGroupID = ""
-        groupMembers = []
-        groupGoalMinutes = 0
-        UserDefaults.standard.removeObject(forKey: "cached_group_goal_minutes")
-        mirrorIdentityToAppGroup()
-        clearCache()
-        lastSubscriptionGroupID = ""
-    }
-
-    // MARK: - Group Goal (shared daily limit)
-
-    // Fetch the group's shared daily limit from CloudKit
-    func fetchGroupGoal() {
-        guard !myGroupID.isEmpty else { return }
-        let predicate = NSPredicate(format: "group_id == %@", myGroupID)
-        let query = CKQuery(recordType: "SocialGroup", predicate: predicate)
-
-        database.fetch(withQuery: query, inZoneWith: nil, resultsLimit: 1) { [weak self] result in
-            guard let self else { return }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if case .success(let (matchResults, _)) = result,
-                   let firstMatch = matchResults.first,
-                   case .success(let record) = firstMatch.1 {
-                    let fetched = record["goal_minutes"] as? Int ?? 0
-                    // Skip if we just saved a local goal — wait for CloudKit to propagate
-                    guard Date().timeIntervalSince(self.lastGoalUpdateTime) > 10 else { return }
-                    self.groupGoalMinutes = fetched
-                    // Persist locally so it shows instantly on next launch
-                    UserDefaults.standard.set(fetched, forKey: "cached_group_goal_minutes")
-                    self.sharedDefaults?.set(fetched, forKey: AppConstants.Keys.sharedGoalMinutes)
-                }
-            }
-        }
-    }
-
-    // Update the daily limit locally and (if in a group) in CloudKit.
-    func updateGroupGoal(_ minutes: Int) {
-        groupGoalMinutes = minutes
-        lastGoalUpdateTime = Date()
-        UserDefaults.standard.set(minutes, forKey: "cached_group_goal_minutes")
-        sharedDefaults?.set(minutes, forKey: AppConstants.Keys.sharedGoalMinutes)
-
-        guard !myGroupID.isEmpty else { return }
-        let recordID = CKRecord.ID(recordName: myGroupID)
-        database.fetch(withRecordID: recordID) { [weak self] record, error in
-            guard let self else { return }
-            guard let record else {
-                print(" Group record not found for goal update")
-                return
-            }
-            record["goal_minutes"] = minutes
-            self.database.save(record) { _, error in
-                if let error {
-                    print(" Group goal save failed: \(error.localizedDescription)")
-                } else {
-                    print(" Group goal saved: \(minutes) min")
-                }
-            }
-        }
+        sharedDefaults?.set(myPersonalGoalMinutes, forKey: AppConstants.Keys.sharedGoalMinutes)
     }
 
     // MARK: - Profile Updates
@@ -283,41 +105,39 @@ class CloudKitManager: ObservableObject {
 
         let phoneHash = PhoneAuthManager.shared.phoneHash
 
-        record["user_id"] = myID
-        record["display_name"] = myDisplayName
-        record["group_id"] = myGroupID
-        record["blocks_used"] = currentBlocks
-        record["post_midnight_blocks"] = postMidnightBlocks
-        record["last_updated"] = Date()
-        record["last_active_date"] = Date()
+        record["user_id"]               = myID
+        record["display_name"]          = myDisplayName
+        record["blocks_used"]           = currentBlocks
+        record["post_midnight_blocks"]  = postMidnightBlocks
+        record["last_updated"]          = Date()
+        record["last_active_date"]      = Date()
+        record["personal_goal_minutes"] = myPersonalGoalMinutes
         if !phoneHash.isEmpty { record["phone_hash"] = phoneHash }
 
         do {
             _ = try await database.save(record)
         } catch let error as CKError where error.code == .serverRecordChanged {
-            // Conflict — re-fetch and retry once
             let latest = try await database.record(for: myUserProfileRecordID)
-            latest["user_id"] = myID
-            latest["display_name"] = myDisplayName
-            latest["group_id"] = myGroupID
-            latest["blocks_used"] = currentBlocks
-            latest["post_midnight_blocks"] = postMidnightBlocks
-            latest["last_updated"] = Date()
-            latest["last_active_date"] = Date()
+            latest["user_id"]               = myID
+            latest["display_name"]          = myDisplayName
+            latest["blocks_used"]           = currentBlocks
+            latest["post_midnight_blocks"]  = postMidnightBlocks
+            latest["last_updated"]          = Date()
+            latest["last_active_date"]      = Date()
+            latest["personal_goal_minutes"] = myPersonalGoalMinutes
             if !phoneHash.isEmpty { latest["phone_hash"] = phoneHash }
             _ = try await database.save(latest)
         }
 
         await MainActor.run { lastSyncTime = Date() }
-        print(" Profile saved: \(currentBlocks) blocks")
+        print("☁️ Profile saved: \(currentBlocks) blocks, \(myPersonalGoalMinutes)m limit")
     }
 
-    // Save this user's current screen time to CloudKit so their group can see it.
     func updateMyProfile(completion: (() -> Void)? = nil) {
         mirrorIdentityToAppGroup()
 
         guard !myDisplayName.isEmpty else {
-            print(" Skipping profile update — display name not set yet")
+            print("⚠️ Skipping profile update — display name not set yet")
             completion?()
             return
         }
@@ -326,55 +146,36 @@ class CloudKitManager: ObservableObject {
             do {
                 try await saveProfileToCloud()
             } catch {
-                print(" Profile save failed: \(error.localizedDescription)")
+                print("❌ Profile save failed: \(error.localizedDescription)")
             }
             completion?()
         }
     }
 
-    // MARK: - Fetching Group Data
+    // MARK: - Personal Goal
 
-    // Pull the latest screen time data for everyone in the group from CloudKit
-    func fetchGroupData(useCache: Bool = true) {
-        guard !myGroupID.isEmpty else { return }
+    func updatePersonalGoal(_ minutes: Int) {
+        myPersonalGoalMinutes = minutes
+        UserDefaults.standard.set(minutes, forKey: AppConstants.Keys.myPersonalGoalMinutes)
+        sharedDefaults?.set(minutes, forKey: AppConstants.Keys.sharedGoalMinutes)
 
-        isLoading = true
-        let refreshingGroupID = myGroupID
-
-        Task { @MainActor in
-            defer { isLoading = false }
+        Task {
             do {
-                let members = try await fetchGroupMembersAsync()
-                guard refreshingGroupID == myGroupID else {
-                    print(" Discarding stale fetch results — group changed mid-fetch")
-                    return
-                }
-                groupMembers = members
-                lastSyncTime = Date()
-                cacheLeaderboardData()
-                print(" Fetched \(members.count) group members")
+                try await saveProfileToCloud()
             } catch {
-                print(" Fetch failed: \(error.localizedDescription)")
-                lastError = handleCloudKitError(error)
+                print("❌ Personal goal save failed: \(error.localizedDescription)")
             }
         }
     }
 
-    // Full refresh: update your own profile then fetch everyone else's.
-    // Called by pull-to-refresh, the 60-second timer, and incoming silent pushes.
-    //
-    // Silent pushes mean "a group member's record changed — go fetch."
-    // We must NOT upload our own profile in response: doing so triggers another push,
-    // which triggers another upload, creating an infinite feedback loop that hammers
-    // CloudKit until it activates error-rate mitigation.
+    // MARK: - Friends Leaderboard
+
+    // Full refresh: upload my profile, fetch friends leaderboard, evaluate notifications.
+    // isSilentPush: skip uploading to avoid push feedback loops.
     @MainActor
-    func refreshGroupNow(reason: String? = nil) async {
-        // Snapshot the group ID at the start of the refresh. If the user leaves the group
-        // while the CloudKit fetch is in-flight, we discard the stale results instead of
-        // writing them back to groupMembers (which was already cleared by leaveGroup()).
-        let refreshingGroupID = myGroupID
-        guard !refreshingGroupID.isEmpty else { return }
-        print(" Refreshing group (\(reason ?? ""))")
+    func refreshFriendsNow(reason: String? = nil) async {
+        guard !myID.isEmpty else { return }
+        print("🔄 Refreshing friends leaderboard (\(reason ?? ""))")
 
         isLoading = true
         defer { isLoading = false }
@@ -389,38 +190,71 @@ class CloudKitManager: ObservableObject {
         }
 
         do {
-            let members = try await fetchGroupMembersAsync()
-            // Only apply results if we're still in the same group we started refreshing for.
-            guard myGroupID == refreshingGroupID else {
-                print(" Discarding stale fetch results — group changed mid-refresh")
-                return
-            }
-            groupMembers = members
+            let members = try await fetchFriendsAsync()
+            friends = members
             lastSyncTime = Date()
+
+            // Sync my own personal goal from CloudKit in case it changed on another device
+            if let me = members.first(where: { $0.userID == myID }) {
+                if me.personalGoalMinutes != myPersonalGoalMinutes {
+                    myPersonalGoalMinutes = me.personalGoalMinutes
+                    UserDefaults.standard.set(me.personalGoalMinutes, forKey: AppConstants.Keys.myPersonalGoalMinutes)
+                    sharedDefaults?.set(me.personalGoalMinutes, forKey: AppConstants.Keys.sharedGoalMinutes)
+                }
+            }
+
             let forceWidgetReload = reason == "pull-to-refresh" || reason == "manual" || reason == "appear"
             cacheLeaderboardData(forceWidgetReload: forceWidgetReload)
-            fetchGroupGoal()
 
-            // Evaluate notification scenarios after every group refresh
             NotificationManager.shared.evaluateAndSchedule(
-                groupMembers: members,
-                myUserID: myID,
-                goalMinutes: groupGoalMinutes
+                members: members,
+                myUserID: myID
             )
+
+            // Also refresh pending requests so the friends badge stays current
+            await fetchPendingRequests()
         } catch {
             lastError = handleCloudKitError(error)
         }
     }
 
-    func fetchGroupMembersAsync() async throws -> [MemberData] {
-        let predicate = NSPredicate(format: "group_id == %@", myGroupID)
-        let query = CKQuery(recordType: "UserProfile", predicate: predicate)
-        query.sortDescriptors = [NSSortDescriptor(key: "blocks_used", ascending: false)]
+    // Backward-compat — existing callsites (AppDelegate, debug screens) still work.
+    @MainActor
+    func refreshGroupNow(reason: String? = nil) async {
+        await refreshFriendsNow(reason: reason)
+    }
 
-        let (matchResults, _) = try await database.records(matching: query)
+    func fetchFriendsAsync() async throws -> [MemberData] {
+        // Step 1: find all accepted friendships involving me
+        let asSender    = NSPredicate(format: "requester_user_id == %@ AND status == 'accepted'", myID)
+        let asRecipient = NSPredicate(format: "recipient_user_id == %@ AND status == 'accepted'", myID)
+        let friendshipPredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [asSender, asRecipient])
+        let friendshipQuery = CKQuery(recordType: "Friendship", predicate: friendshipPredicate)
+
+        let (friendshipResults, _) = try await database.records(matching: friendshipQuery)
+
+        var friendIDs: [String] = []
+        for (_, result) in friendshipResults {
+            if case .success(let record) = result {
+                let requester = record["requester_user_id"] as? String ?? ""
+                let recipient = record["recipient_user_id"] as? String ?? ""
+                let friendID  = requester == myID ? recipient : requester
+                if !friendID.isEmpty, friendID != myID {
+                    friendIDs.append(friendID)
+                }
+            }
+        }
+
+        // Step 2: fetch UserProfile for friends + myself
+        let allIDs = Array(Set(friendIDs + [myID]))
+        let profilePredicate = NSPredicate(format: "user_id IN %@", allIDs)
+        let profileQuery = CKQuery(recordType: "UserProfile", predicate: profilePredicate)
+        profileQuery.sortDescriptors = [NSSortDescriptor(key: "blocks_used", ascending: false)]
+
+        let (profileResults, _) = try await database.records(matching: profileQuery)
         var members: [MemberData] = []
 
-        for (_, result) in matchResults {
+        for (_, result) in profileResults {
             if case .success(let record) = result {
                 let userID = record["user_id"] as? String ?? record.recordID.recordName
                 members.append(MemberData(
@@ -428,9 +262,22 @@ class CloudKitManager: ObservableObject {
                     displayName: record["display_name"] as? String ?? userID,
                     blocks: record["blocks_used"] as? Int ?? 0,
                     lastUpdate: record["last_updated"] as? Date ?? Date(),
-                    postMidnightBlocks: record["post_midnight_blocks"] as? Int ?? 0
+                    postMidnightBlocks: record["post_midnight_blocks"] as? Int ?? 0,
+                    personalGoalMinutes: record["personal_goal_minutes"] as? Int ?? 0
                 ))
             }
+        }
+
+        // If my own profile wasn't in CloudKit yet, inject local data so dashboard isn't blank
+        if !members.contains(where: { $0.userID == myID }) {
+            let localBlocks = sharedDefaults?.integer(forKey: AppConstants.Keys.dailyBlocksUsed) ?? 0
+            members.append(MemberData(
+                userID: myID,
+                displayName: myDisplayName,
+                blocks: localBlocks,
+                lastUpdate: Date(),
+                personalGoalMinutes: myPersonalGoalMinutes
+            ))
         }
 
         return dedupeMembers(members)
@@ -453,22 +300,163 @@ class CloudKitManager: ObservableObject {
         }
     }
 
-    // Remove old duplicate CloudKit records created by earlier builds or reinstalls
+    // MARK: - Friend Requests
+
+    // Look up a UserProfile by friend code (first 6 chars of user_id, case-insensitive).
+    // Returns nil if not found or if the code matches the current user.
+    func lookupUserByFriendCode(_ code: String) async throws -> (userID: String, displayName: String)? {
+        let prefix = code.lowercased()
+        guard prefix.count == 6 else { return nil }
+        let predicate = NSPredicate(format: "user_id BEGINSWITH %@", prefix)
+        let query = CKQuery(recordType: "UserProfile", predicate: predicate)
+        let (results, _) = try await database.records(matching: query, resultsLimit: 5)
+
+        for (_, result) in results {
+            if case .success(let record) = result,
+               let userID = record["user_id"] as? String,
+               let name   = record["display_name"] as? String,
+               userID != myID {
+                return (userID: userID, displayName: name)
+            }
+        }
+        return nil
+    }
+
+    // Send a friend request to another user. Creates a Friendship record with status "pending".
+    func sendFriendRequest(toUserID: String) async throws {
+        // Check we don't already have a friendship with this person
+        let existing1 = NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@", myID, toUserID)
+        let existing2 = NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@", toUserID, myID)
+        let existingPredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [existing1, existing2])
+        let checkQuery = CKQuery(recordType: "Friendship", predicate: existingPredicate)
+        let (existing, _) = try await database.records(matching: checkQuery, resultsLimit: 1)
+        if !existing.isEmpty { throw FriendError.alreadyExists }
+
+        let record = CKRecord(recordType: "Friendship")
+        record["requester_user_id"] = myID
+        record["recipient_user_id"] = toUserID
+        record["status"]            = "pending"
+        record["created_at"]        = Date()
+        record["updated_at"]        = Date()
+
+        let requesterPhoneHash = PhoneAuthManager.shared.phoneHash
+        if !requesterPhoneHash.isEmpty {
+            record["requester_phone_hash"] = requesterPhoneHash
+        }
+
+        _ = try await database.save(record)
+        print("✅ Friend request sent to \(toUserID)")
+    }
+
+    // Fetch pending incoming requests (where I am the recipient).
+    @MainActor
+    func fetchPendingRequests() async {
+        guard !myID.isEmpty else { return }
+        let predicate = NSPredicate(format: "recipient_user_id == %@ AND status == 'pending'", myID)
+        let query = CKQuery(recordType: "Friendship", predicate: predicate)
+
+        do {
+            let (results, _) = try await database.records(matching: query)
+
+            var requests: [FriendRequest] = []
+            var requesterIDs: [String] = []
+
+            for (_, result) in results {
+                if case .success(let record) = result,
+                   let requesterID = record["requester_user_id"] as? String {
+                    requests.append(FriendRequest(
+                        id: record.recordID.recordName,
+                        recordID: record.recordID,
+                        requesterUserID: requesterID,
+                        requesterName: requesterID // will fill in below
+                    ))
+                    requesterIDs.append(requesterID)
+                }
+            }
+
+            // Fetch display names for requesters
+            if !requesterIDs.isEmpty {
+                let namePredicate = NSPredicate(format: "user_id IN %@", requesterIDs)
+                let nameQuery = CKQuery(recordType: "UserProfile", predicate: namePredicate)
+                let (nameResults, _) = try await database.records(matching: nameQuery)
+                var names: [String: String] = [:]
+                for (_, result) in nameResults {
+                    if case .success(let record) = result,
+                       let uid  = record["user_id"] as? String,
+                       let name = record["display_name"] as? String {
+                        names[uid] = name
+                    }
+                }
+                requests = requests.map { req in
+                    FriendRequest(
+                        id: req.id,
+                        recordID: req.recordID,
+                        requesterUserID: req.requesterUserID,
+                        requesterName: names[req.requesterUserID] ?? req.requesterUserID
+                    )
+                }
+            }
+
+            pendingRequests = requests
+        } catch {
+            print("❌ fetchPendingRequests failed: \(error.localizedDescription)")
+        }
+    }
+
+    // Accept an incoming friend request — sets status to "accepted".
+    func acceptFriendRequest(_ request: FriendRequest) async {
+        do {
+            let record = try await database.record(for: request.recordID)
+            record["status"]     = "accepted"
+            record["updated_at"] = Date()
+            _ = try await database.save(record)
+            await MainActor.run {
+                pendingRequests.removeAll { $0.id == request.id }
+            }
+            print("✅ Accepted friend request from \(request.requesterName)")
+            Task { @MainActor in await refreshFriendsNow(reason: "accept") }
+        } catch {
+            print("❌ acceptFriendRequest failed: \(error.localizedDescription)")
+        }
+    }
+
+    // Decline or remove — sets status to "rejected".
+    func declineFriendRequest(_ request: FriendRequest) async {
+        do {
+            let record = try await database.record(for: request.recordID)
+            record["status"]     = "rejected"
+            record["updated_at"] = Date()
+            _ = try await database.save(record)
+            await MainActor.run {
+                pendingRequests.removeAll { $0.id == request.id }
+            }
+            print("✅ Declined friend request from \(request.requesterName)")
+        } catch {
+            print("❌ declineFriendRequest failed: \(error.localizedDescription)")
+        }
+    }
+
+    enum FriendError: LocalizedError {
+        case alreadyExists
+        var errorDescription: String? {
+            switch self {
+            case .alreadyExists: return "You already have a friendship or pending request with this person."
+            }
+        }
+    }
+
+    // MARK: - Duplicate Cleanup
+
     private func cleanupMyDuplicateProfiles() async throws {
-        // Only operate on records that explicitly belong to this user ID.
-        // Never match by display name; multiple users can legitimately share a name.
         let query = CKQuery(recordType: "UserProfile", predicate: NSPredicate(format: "user_id == %@", myID))
         let (matchResults, _) = try await database.records(matching: query)
         let records: [CKRecord] = matchResults.compactMap {
             if case .success(let r) = $0.1 { return r }
             return nil
         }
-
-        // Keep the record whose name matches our stable user ID, delete everything else
         let toDelete = records.map(\.recordID).filter { $0 != myUserProfileRecordID }
         guard !toDelete.isEmpty else { return }
-
-        print(" Deleting \(toDelete.count) duplicate profile(s)")
+        print("🧹 Deleting \(toDelete.count) duplicate profile(s)")
         for recordID in toDelete {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 database.delete(withRecordID: recordID) { _, error in
@@ -478,7 +466,6 @@ class CloudKitManager: ObservableObject {
         }
     }
 
-    // If multiple CloudKit records exist for the same user ID, keep only the most recent one.
     private func dedupeMembers(_ members: [MemberData]) -> [MemberData] {
         var byUserID: [String: MemberData] = [:]
         for member in members {
@@ -493,7 +480,6 @@ class CloudKitManager: ObservableObject {
 
     // MARK: - Background Sync
 
-    // Called by the 15-minute background task while the app is closed.
     func performBackgroundCheckDetailed() async -> (success: Bool, errorMessage: String?, ckErrorCode: Int?, retryAfterSeconds: Double?) {
         guard !myDisplayName.isEmpty else {
             return (false, "Display name not set", nil, nil)
@@ -518,23 +504,17 @@ class CloudKitManager: ObservableObject {
         } catch {
             let retryAfter = (error as? CKError)?.userInfo[CKErrorRetryAfterKey] as? Double
             let code = (error as? CKError)?.code.rawValue
-            print(" Background sync failed: \(error.localizedDescription)")
+            print("❌ Background sync failed: \(error.localizedDescription)")
             return (false, error.localizedDescription, code, retryAfter)
         }
     }
 
     // MARK: - Caching
 
-    // Save the group member list to App Group storage so the widget can read it
-    // without needing to hit CloudKit directly.
     private func cacheLeaderboardData(forceWidgetReload: Bool = false) {
-        if let encoded = try? CloudKitManager.jsonEncoder.encode(groupMembers) {
+        if let encoded = try? CloudKitManager.jsonEncoder.encode(friends) {
             sharedDefaults?.set(encoded, forKey: AppConstants.Keys.cachedLeaderboardData)
         }
-        // Throttle widget reloads dynamically:
-        // - active app: faster updates for visible UX
-        // - background app: conservative cadence for battery/stability
-        // Widget still has its own 15-minute timeline fallback.
         #if canImport(WidgetKit)
         #if canImport(UIKit)
         let isForeground = UIApplication.shared.applicationState == .active
@@ -555,12 +535,11 @@ class CloudKitManager: ObservableObject {
         #endif
     }
 
-    // Load cached group data on launch so the UI shows something instantly
     private func loadCachedData() {
         if let data = sharedDefaults?.data(forKey: AppConstants.Keys.cachedLeaderboardData),
            let cached = try? CloudKitManager.jsonDecoder.decode([MemberData].self, from: data) {
-            self.groupMembers = cached
-            print(" Loaded \(cached.count) cached members from disk")
+            self.friends = cached
+            print("💾 Loaded \(cached.count) cached friends from disk")
         }
     }
 
@@ -591,25 +570,24 @@ class CloudKitManager: ObservableObject {
     }
 
     func forceSyncNow() {
-        Task { @MainActor in await refreshGroupNow(reason: "manual") }
+        Task { @MainActor in await refreshFriendsNow(reason: "manual") }
     }
 
-    // Zero out this user's block count locally and push 0 to CloudKit immediately.
     func resetMyCountToZero(completion: (() -> Void)? = nil) {
         sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-        print(" Reset local block count to 0 — uploading to CloudKit...")
+        print("🔄 Reset local block count to 0 — uploading to CloudKit...")
 
         Task {
             do {
                 try await saveProfileToCloud(blocks: 0)
-                print(" Reset uploaded to CloudKit")
+                print("✅ Reset uploaded to CloudKit")
                 await MainActor.run { [weak self] in
-                    Task { await self?.refreshGroupNow(reason: "reset") }
+                    Task { await self?.refreshFriendsNow(reason: "reset") }
                 }
             } catch {
-                print(" Reset upload failed: \(error.localizedDescription)")
+                print("❌ Reset upload failed: \(error.localizedDescription)")
             }
             completion?()
         }
@@ -620,10 +598,47 @@ class CloudKitManager: ObservableObject {
         myDisplayName = ""
         isSetupDone = false
         usernameSet = false
-        groupMembers = []
+        friends = []
+        pendingRequests = []
+        myPersonalGoalMinutes = 0
+        UserDefaults.standard.removeObject(forKey: AppConstants.Keys.myPersonalGoalMinutes)
         clearCache()
         sharedDefaults?.removeObject(forKey: AppConstants.Keys.dailyBlocksUsed)
         sharedDefaults?.removeObject(forKey: AppConstants.Keys.lastBlockDate)
-        print(" All data reset")
+        print("🗑️ All data reset")
+    }
+
+    // MARK: - Legacy Group Methods (kept for debug/settings compatibility — Task 4 removes these)
+
+    func ensureGroupSubscription() {
+        // Groups replaced by friendships — subscription model pending Task 4 cleanup
+    }
+
+    func leaveGroup() {
+        myGroupID = ""
+        friends = []
+        myPersonalGoalMinutes = 0
+        UserDefaults.standard.removeObject(forKey: AppConstants.Keys.myPersonalGoalMinutes)
+        mirrorIdentityToAppGroup()
+        clearCache()
+    }
+
+    func createGroup(completion: @escaping (Result<String, ErrorHandler.AppError>) -> Void) {
+        completion(.failure(.cloudKitError("Groups have been replaced with friendships.")))
+    }
+
+    func validateGroup(_ groupID: String, completion: @escaping (Result<SocialGroup, ErrorHandler.AppError>) -> Void) {
+        completion(.failure(.groupNotFound))
+    }
+
+    func joinGroup(groupID: String) { }
+
+    func fetchGroupData(useCache: Bool = true) {
+        Task { @MainActor in await refreshFriendsNow(reason: "compat") }
+    }
+
+    // GroupMembersAsync backward-compat — background task in screenmatesApp calls this.
+    func fetchGroupMembersAsync() async throws -> [MemberData] {
+        try await fetchFriendsAsync()
     }
 }

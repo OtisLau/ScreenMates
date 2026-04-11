@@ -12,11 +12,7 @@ struct ScreenMatesApp: App {
         WindowGroup {
             ContentView()
                 .onAppear {
-                    // Schedule background refresh after app launches
                     scheduleBackgroundRefresh()
-
-                    // Ensure CloudKit subscription so other devices get silent updates.
-                    cloudManager.ensureGroupSubscription()
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active, cloudManager.isSetupDone else { return }
@@ -29,12 +25,11 @@ struct ScreenMatesApp: App {
 
             let result = await cloudManager.performBackgroundCheckDetailed()
 
-            // Fetch group data and evaluate notifications in background
-            if let members = try? await cloudManager.fetchGroupMembersAsync() {
+            // Fetch friends leaderboard and evaluate notifications in background
+            if let members = try? await cloudManager.fetchFriendsAsync() {
                 NotificationManager.shared.evaluateAndSchedule(
-                    groupMembers: members,
-                    myUserID: cloudManager.myID,
-                    goalMinutes: cloudManager.groupGoalMinutes
+                    members: members,
+                    myUserID: cloudManager.myID
                 )
             }
 

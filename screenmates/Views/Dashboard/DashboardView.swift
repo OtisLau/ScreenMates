@@ -1,10 +1,10 @@
 import SwiftUI
 import Combine
 
-// Main dashboard — your time at top, group leaderboard below.
 struct DashboardView: View {
     @ObservedObject var cloudManager = CloudKitManager.shared
     @State private var showingSettings = false
+    @State private var showingFriends  = false
 
     let timer = Timer.publish(every: AppConstants.dashboardRefreshInterval, on: .main, in: .common).autoconnect()
 
@@ -15,31 +15,28 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                // Dot grid sits behind everything
                 DotGridBackground()
 
                 ScrollView {
                     VStack(spacing: 0) {
 
-                        // Your stats — hero section, no card border
+                        // Hero — your own stats
                         UserStatsCard(
                             minutesUsed: myMinutesUsed,
                             displayName: cloudManager.myDisplayName,
-                            goalMinutes: cloudManager.groupGoalMinutes
+                            goalMinutes: cloudManager.myPersonalGoalMinutes
                         )
                         .padding(.horizontal, 24)
                         .padding(.top, 8)
 
-                        // Divider before group
                         Rectangle()
                             .fill(Color.primary.opacity(0.07))
                             .frame(height: 1)
                             .padding(.horizontal, 24)
                             .padding(.top, 4)
 
-                        // Group section
+                        // Friends leaderboard
                         VStack(spacing: 0) {
-                            // Leaderboard header
                             Text("LEADERBOARD")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
@@ -49,22 +46,21 @@ struct DashboardView: View {
                                 .padding(.top, 24)
                                 .padding(.bottom, 12)
 
-                            // Member rows inside one contained glass card
-                            if cloudManager.isLoading && cloudManager.groupMembers.isEmpty {
+                            if cloudManager.isLoading && cloudManager.friends.isEmpty {
                                 ProgressView()
                                     .padding(40)
-                            } else if cloudManager.groupMembers.isEmpty {
+                            } else if cloudManager.friends.isEmpty {
                                 emptyState
                             } else {
                                 VStack(spacing: 0) {
-                                    ForEach(Array(cloudManager.groupMembers.enumerated()), id: \.element.id) { index, member in
+                                    ForEach(Array(cloudManager.friends.enumerated()), id: \.element.id) { index, member in
                                         GroupMemberRow(
                                             member: member,
                                             isCurrentUser: member.userID == cloudManager.myID,
                                             rank: index + 1
                                         )
 
-                                        if index < cloudManager.groupMembers.count - 1 {
+                                        if index < cloudManager.friends.count - 1 {
                                             Rectangle()
                                                 .fill(Color.primary.opacity(0.06))
                                                 .frame(height: 1)
@@ -78,7 +74,6 @@ struct DashboardView: View {
                             }
                         }
 
-                        // Sync footer
                         if let lastSync = cloudManager.lastSyncTime {
                             Text("synced \(DateHelpers.relativeTime(from: lastSync))")
                                 .font(.system(size: 11))
@@ -90,12 +85,28 @@ struct DashboardView: View {
                     }
                 }
                 .refreshable {
-                    await cloudManager.refreshGroupNow(reason: "pull-to-refresh")
+                    await cloudManager.refreshFriendsNow(reason: "pull-to-refresh")
                 }
             }
             .navigationTitle("ScreenMates")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showingFriends = true
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "person.2")
+                            if cloudManager.pendingRequests.count > 0 {
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 8, height: 8)
+                                    .offset(x: 3, y: -3)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showingSettings = true
@@ -105,17 +116,20 @@ struct DashboardView: View {
                     .buttonStyle(.plain)
                 }
             }
+            .sheet(isPresented: $showingFriends) {
+                FriendsView()
+            }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }
             .onAppear {
                 Task { @MainActor in
-                    await cloudManager.refreshGroupNow(reason: "appear")
+                    await cloudManager.refreshFriendsNow(reason: "appear")
                 }
             }
             .onReceive(timer) { _ in
                 Task { @MainActor in
-                    await cloudManager.refreshGroupNow(reason: "timer")
+                    await cloudManager.refreshFriendsNow(reason: "timer")
                 }
             }
         }
@@ -123,10 +137,10 @@ struct DashboardView: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Text("No one here yet")
+            Text("No friends yet")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text("Share your group code to invite friends.")
+            Text("Tap the friends button to add someone.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)

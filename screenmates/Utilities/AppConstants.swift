@@ -84,6 +84,9 @@ struct AppConstants {
         static let phoneNumberE164    = "PhoneNumberE164"
         static let phoneHash          = "PhoneHash"
         static let authProviderUserID = "AuthProviderUserID"
+
+        // Personal daily limit (per-user, replaces shared group goal)
+        static let myPersonalGoalMinutes = "MyPersonalGoalMinutes"
     }
 
     static func thresholdEventsPerDay(for blockSize: Int) -> Int {

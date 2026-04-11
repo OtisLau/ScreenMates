@@ -70,6 +70,19 @@ Replace setup routing with:
 - Denying contacts does not block the user from reaching the dashboard.
 - Setup routing no longer depends on `myGroupID`.
 
+## Updated Direction (from build session)
+
+### Username vs generated code
+Currently setup collects only a display name (not unique). We need a way for users to find each other outside of contact matching. Two paths:
+- **Generated code**: derive a short shareable code from the existing `user_id` (e.g. first 8 chars uppercased). No extra setup step, no uniqueness check needed. User sees their code in settings and can share it.
+- **Unique username**: add a username step to setup. Requires a CloudKit uniqueness check before accepting. More friction but more personal.
+
+Decision: start with generated code — simpler, no race conditions, works day one.
+
+### What Task 1 still needs to surface
+- The user's shareable friend code (derived from `user_id`) should be visible in Settings
+- After contacts discovery, if there are no matches, show an "invite a friend" option that shares the friend link
+
 ## UI Style Reference
 
 All new onboarding screens must match the existing pattern:

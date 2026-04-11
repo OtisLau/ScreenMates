@@ -4,7 +4,6 @@ struct SettingsView: View {
     @ObservedObject private var cloudManager = CloudKitManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showingDebugMenu = false
-    @State private var showingLeaveConfirm = false
     @State private var codeCopied = false
 
     @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
@@ -14,16 +13,16 @@ struct SettingsView: View {
     @State private var limitMinutes: Int = 0
 
     private var limitChanged: Bool {
-        limitHours * 60 + limitMinutes != cloudManager.groupGoalMinutes
+        limitHours * 60 + limitMinutes != cloudManager.myPersonalGoalMinutes
     }
 
     private func loadLimit() {
-        limitHours   = cloudManager.groupGoalMinutes / 60
-        limitMinutes = (cloudManager.groupGoalMinutes % 60 / 5) * 5
+        limitHours   = cloudManager.myPersonalGoalMinutes / 60
+        limitMinutes = (cloudManager.myPersonalGoalMinutes % 60 / 5) * 5
     }
 
     private func saveLimit() {
-        cloudManager.updateGroupGoal(limitHours * 60 + limitMinutes)
+        cloudManager.updatePersonalGoal(limitHours * 60 + limitMinutes)
     }
 
     private var limitSummary: String {
@@ -46,66 +45,33 @@ struct SettingsView: View {
                         label: "Display Name",
                         value: cloudManager.myDisplayName.isEmpty ? "Not set" : cloudManager.myDisplayName
                     )
-                    settingsRow(
-                        icon: "number",
-                        label: "User ID",
-                        value: cloudManager.myID
-                    )
-                }
-
-                // Group
-                Section("Group") {
-                    if cloudManager.myGroupID.isEmpty {
-                        settingsRow(icon: "person.2", label: "Group", value: "Not in a group")
-                    } else {
-                        // Tap to copy — shows checkmark feedback
-                        Button {
-                            UIPasteboard.general.string = cloudManager.myGroupID
-                            codeCopied = true
-                            Task { @MainActor in
-                                try? await Task.sleep(for: .seconds(1.8))
-                                codeCopied = false
-                            }
-                        } label: {
-                            HStack {
-                                Image(systemName: "person.2")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 20)
-                                Text("Group Code")
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Text(cloudManager.myGroupID)
-                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                Image(systemName: codeCopied ? "checkmark" : "doc.on.doc")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(codeCopied ? Color(UIColor.systemGreen) : Color(UIColor.tertiaryLabel))
-                                    .animation(.easeInOut(duration: 0.2), value: codeCopied)
-                            }
+                    // Friend code — tap to copy
+                    Button {
+                        UIPasteboard.general.string = cloudManager.myFriendCode
+                        codeCopied = true
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(1.8))
+                            codeCopied = false
                         }
-                        .buttonStyle(.plain)
-
-                        // Leave Group — confirmationDialog anchored to this button
-                        Button(role: .destructive) {
-                            showingLeaveConfirm = true
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.red)
-                                    .frame(width: 20)
-                                Text("Leave Group")
-                                    .foregroundStyle(.red)
-                            }
-                        }
-                        .confirmationDialog("Leave group?", isPresented: $showingLeaveConfirm, titleVisibility: .visible) {
-                            Button("Leave Group", role: .destructive) { cloudManager.leaveGroup() }
-                            Button("Cancel", role: .cancel) {}
-                        } message: {
-                            Text("You'll need a new code to rejoin.")
+                    } label: {
+                        HStack {
+                            Image(systemName: "number")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
+                            Text("Friend Code")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text(cloudManager.myFriendCode)
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                            Image(systemName: codeCopied ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 12))
+                                .foregroundStyle(codeCopied ? Color(UIColor.systemGreen) : Color(UIColor.tertiaryLabel))
+                                .animation(.easeInOut(duration: 0.2), value: codeCopied)
                         }
                     }
+                    .buttonStyle(.plain)
                 }
 
                 // Friends
@@ -152,10 +118,10 @@ struct SettingsView: View {
                 } header: {
                     Text("Notifications")
                 } footer: {
-                    Text("Get sarcastic updates when group members go over the limit or doom scroll past midnight")
+                    Text("Get sarcastic updates when friends go over their limit or doom scroll past midnight")
                 }
 
-                // Limit
+                // Daily Limit
                 Section {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
@@ -201,11 +167,12 @@ struct SettingsView: View {
                             .buttonStyle(.borderedProminent)
                             .tint(.blue)
                         }
-
                     }
                     .padding(.vertical, 4)
                 } header: {
                     Text("Limit")
+                } footer: {
+                    Text("Your personal daily screen-time limit. Friends see their own limit on their device.")
                 }
 
                 // Tools (dev only)
