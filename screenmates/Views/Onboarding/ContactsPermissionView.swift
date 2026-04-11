@@ -16,6 +16,7 @@ struct ContactsPermissionView: View {
     @State private var isSearching = false
     @State private var matches: [ContactMatch] = []
     @State private var searchDone = false
+    @State private var showDeniedAlert = false
 
     var body: some View {
         ZStack {
@@ -28,9 +29,22 @@ struct ContactsPermissionView: View {
         }
         .onAppear {
             // If permission already granted from a previous session, go straight to search.
-            if CNContactStore.authorizationStatus(for: .contacts) == .authorized {
+            let status = CNContactStore.authorizationStatus(for: .contacts)
+            if status == .authorized || status == .limited {
                 startSearch()
             }
+        }
+        .alert("Contacts Access Needed", isPresented: $showDeniedAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Skip", role: .cancel) {
+                auth.markContactsHandled()
+            }
+        } message: {
+            Text("To find friends, enable Contacts access in Settings.")
         }
     }
 
@@ -224,9 +238,9 @@ struct ContactsPermissionView: View {
                 }
             }
         case .denied, .restricted:
-            auth.markContactsHandled()
+            showDeniedAlert = true
         @unknown default:
-            auth.markContactsHandled()
+            showDeniedAlert = true
         }
     }
 
