@@ -170,20 +170,24 @@ struct ContactsPermissionView: View {
 
             Spacer()
 
-            Button {
-                auth.markContactsHandled()
-            } label: {
-                HStack(spacing: 8) {
-                    Text("Continue").fontWeight(.semibold)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 14, weight: .semibold))
+            // Only show Continue during onboarding. From Settings the view is in a
+            // NavigationLink so dismiss() is enough — markContactsHandled is already true.
+            if !auth.contactsHandled {
+                Button {
+                    auth.markContactsHandled()
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Continue").fontWeight(.semibold)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+                .glassProminentButtonStyle()
+                .padding(.horizontal, 24)
+                .padding(.bottom, 48)
             }
-            .glassProminentButtonStyle()
-            .padding(.horizontal, 24)
-            .padding(.bottom, 48)
         }
     }
 

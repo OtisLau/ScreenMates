@@ -87,38 +87,36 @@ struct SettingsView: View {
                     Text("Search your contacts for people already on ScreenMates")
                 }
 
-                // Notifications
-                Section {
-                    Toggle(isOn: $notificationsEnabled) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "bell.badge")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 20)
-                            Text("Notifications")
-                        }
-                    }
-
-                    if notificationPermissionDenied {
+                // Notifications — only show toggle if permission isn't already granted
+                if notificationPermissionDenied {
+                    Section("Notifications") {
                         Button {
                             if let url = URL(string: UIApplication.openSettingsURLString) {
                                 UIApplication.shared.open(url)
                             }
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: "gear")
+                                Image(systemName: "bell.slash")
                                     .font(.system(size: 14))
                                     .foregroundStyle(.secondary)
                                     .frame(width: 20)
-                                Text("Enable in Settings")
+                                Text("Enable Notifications in Settings")
                                     .foregroundStyle(.blue)
                             }
                         }
                     }
-                } header: {
-                    Text("Notifications")
-                } footer: {
-                    Text("Get sarcastic updates when friends go over their limit or doom scroll past midnight")
+                } else if !notificationsEnabled {
+                    Section("Notifications") {
+                        Toggle(isOn: $notificationsEnabled) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "bell.badge")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 20)
+                                Text("Notifications")
+                            }
+                        }
+                    }
                 }
 
                 // Daily Limit

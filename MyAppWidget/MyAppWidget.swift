@@ -141,6 +141,8 @@ private struct WidgetDotGrid: View {
             let dotColor = Color.white.opacity(0.11)
             let cols = Int(size.width / spacing) + 2
             let rows = Int(size.height / spacing) + 2
+            // Guard against runaway loop during placeholder/snapshot with large sizes
+            guard cols < 200, rows < 200 else { return }
             var path = Path()
             for row in 0...rows {
                 for col in 0...cols {
@@ -190,7 +192,7 @@ private struct WidgetProgressBorder: View {
     var body: some View {
         ContainerRelativeShape()
             .strokeBorder(ringColor, lineWidth: 4)
-            .mask { PieSlice(fraction: remaining) }
+            .clipShape(PieSlice(fraction: remaining))
     }
 }
 

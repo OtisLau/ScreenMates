@@ -95,15 +95,15 @@ struct DashboardView: View {
                     Button {
                         showingFriends = true
                     } label: {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: "person.2")
-                            if cloudManager.pendingRequests.count > 0 {
-                                Circle()
-                                    .fill(Color.red)
-                                    .frame(width: 8, height: 8)
-                                    .offset(x: 3, y: -3)
+                        Image(systemName: "person.2.fill")
+                            .overlay(alignment: .topTrailing) {
+                                if cloudManager.pendingRequests.count > 0 {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 7, height: 7)
+                                        .offset(x: 4, y: -4)
+                                }
                             }
-                        }
                     }
                     .buttonStyle(.plain)
                 }
