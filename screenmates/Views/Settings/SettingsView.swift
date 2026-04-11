@@ -108,6 +108,19 @@ struct SettingsView: View {
                     }
                 }
 
+                // Friends
+                Section {
+                    NavigationLink {
+                        ContactsPermissionView()
+                    } label: {
+                        settingsRow(icon: "person.2", label: "Find Friends", value: "")
+                    }
+                } header: {
+                    Text("Friends")
+                } footer: {
+                    Text("Search your contacts for people already on ScreenMates")
+                }
+
                 // Notifications
                 Section {
                     Toggle(isOn: $notificationsEnabled) {
