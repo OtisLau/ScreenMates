@@ -53,7 +53,7 @@ struct FriendsView: View {
                         ShareLink(item: "Add me on ScreenMates! My code: \(cloudManager.myFriendCode)") {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 15))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.blue)
                         }
                     }
                 }
