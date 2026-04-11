@@ -210,35 +210,37 @@ struct MyAppWidgetEntryView: View {
     }
 
     var body: some View {
-        ZStack {
-            WidgetDotGrid()
-
+        VStack(alignment: .leading, spacing: 0) {
             if entry.members.isEmpty {
+                Spacer()
                 Text("Open app to start")
                     .font(.system(size: 11, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.55))
+                    .frame(maxWidth: .infinity)
+                Spacer()
             } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
-                        WidgetMemberRow(
-                            rank: index + 1,
-                            member: member,
-                            blockSize: entry.blockSizeMinutes,
-                            isTop: index == 0
-                        )
-                        .padding(.vertical, 10)
-                        if index < entry.members.count - 1 {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.07))
-                                .frame(height: 1)
-                        }
+                ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
+                    WidgetMemberRow(
+                        rank: index + 1,
+                        member: member,
+                        blockSize: entry.blockSizeMinutes,
+                        isTop: index == 0
+                    )
+                    .padding(.vertical, 10)
+                    if index < entry.members.count - 1 {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.07))
+                            .frame(height: 1)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                Spacer()
             }
-
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background { WidgetDotGrid() }
+        .overlay {
             if entry.myGoalMinutes > 0 {
                 WidgetProgressBorder(remaining: myRemaining)
             }
