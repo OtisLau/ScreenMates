@@ -128,7 +128,7 @@ struct DiagnosticView: View {
         result += "  E164: '\(phoneNum.isEmpty ? "NOT SET" : phoneNum)'\n"
         result += "  Hash: '\(phoneHash.isEmpty ? "NOT SET — contacts won't match" : String(phoneHash.prefix(12)) + "...")'\n"
         if phoneHash.isEmpty {
-            result += "  ⚠️ No phone hash — tap 'Re-upload Phone Hash' to fix\n"
+            result += "  No phone hash - tap 'Re-upload Phone Hash' to fix\n"
         }
         result += "\n"
 
@@ -149,7 +149,7 @@ struct DiagnosticView: View {
         let hash = PhoneAuthManager.shared.phoneHash
         let e164 = PhoneAuthManager.shared.phoneNumberE164
         if hash.isEmpty {
-            diagnosticResult += "\n\n⚠️ No phone hash stored locally — go through phone number setup first\n"
+            diagnosticResult += "\n\nNo phone hash stored locally - go through phone number setup first\n"
             return
         }
         diagnosticResult += "\n\n Uploading phone hash to CloudKit...\n"

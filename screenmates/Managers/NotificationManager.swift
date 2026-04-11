@@ -14,7 +14,7 @@ class NotificationManager {
             return try await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound])
         } catch {
-            print("❌ Notification permission request failed: \(error.localizedDescription)")
+            print("Notification permission request failed: \(error.localizedDescription)")
             return false
         }
     }

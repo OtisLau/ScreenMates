@@ -12,6 +12,7 @@ struct FriendsView: View {
     @State private var suggestedFriends: [ContactMatch] = []
     @State private var isLoadingSuggestions = false
     @State private var processingRequestIDs: Set<String> = []
+    @State private var removingFriendIDs: Set<String> = []
     @State private var requestErrorMessage: String?
 
     enum LookupState: Equatable {
@@ -149,9 +150,22 @@ struct FriendsView: View {
                             HStack {
                                 Text(friend.displayName).font(.system(size: 15))
                                 Spacer()
-                                Text(friend.userID.prefix(6).uppercased())
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
+                                if removingFriendIDs.contains(friend.userID) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Text(friend.userID.prefix(6).uppercased())
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    Task { await removeFriend(friend) }
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                .disabled(removingFriendIDs.contains(friend.userID))
                             }
                         }
                     }
@@ -267,7 +281,7 @@ struct FriendsView: View {
                 return ContactMatch(contactName: name, displayName: profile.displayName, userID: profile.userID)
             }
         } catch {
-            print("❌ fetchUsersByPhoneHashes failed: \(error)")
+            print("fetchUsersByPhoneHashes failed: \(error)")
             return []
         }
     }
@@ -319,6 +333,20 @@ struct FriendsView: View {
             """
         }
         return error.localizedDescription
+    }
+
+    @MainActor
+    private func removeFriend(_ friend: MemberData) async {
+        guard !removingFriendIDs.contains(friend.userID) else { return }
+
+        removingFriendIDs.insert(friend.userID)
+        defer { removingFriendIDs.remove(friend.userID) }
+
+        do {
+            try await cloudManager.removeFriend(userID: friend.userID)
+        } catch {
+            requestErrorMessage = friendRequestErrorMessage(from: error)
+        }
     }
 
     private func lookupFriend() async {

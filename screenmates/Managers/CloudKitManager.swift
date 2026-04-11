@@ -137,7 +137,7 @@ class CloudKitManager: ObservableObject {
         mirrorIdentityToAppGroup()
 
         guard !myDisplayName.isEmpty else {
-            print("⚠️ Skipping profile update — display name not set yet")
+            print("Skipping profile update - display name not set yet")
             completion?()
             return
         }
@@ -146,7 +146,7 @@ class CloudKitManager: ObservableObject {
             do {
                 try await saveProfileToCloud()
             } catch {
-                print("❌ Profile save failed: \(error.localizedDescription)")
+                print("Profile save failed: \(error.localizedDescription)")
             }
             completion?()
         }
@@ -163,7 +163,7 @@ class CloudKitManager: ObservableObject {
             do {
                 try await saveProfileToCloud()
             } catch {
-                print("❌ Personal goal save failed: \(error.localizedDescription)")
+                print("Personal goal save failed: \(error.localizedDescription)")
             }
         }
     }
@@ -175,7 +175,7 @@ class CloudKitManager: ObservableObject {
     @MainActor
     func refreshFriendsNow(reason: String? = nil) async {
         guard !myID.isEmpty else { return }
-        print("🔄 Refreshing friends leaderboard (\(reason ?? ""))")
+        print("Refreshing friends leaderboard (\(reason ?? ""))")
 
         isLoading = true
         defer { isLoading = false }
@@ -352,7 +352,7 @@ class CloudKitManager: ObservableObject {
         }
 
         _ = try await database.save(record)
-        print("✅ Friend request sent to \(toUserID)")
+        print("Friend request sent to \(toUserID)")
     }
 
     // Fetch pending incoming requests (where I am the recipient).
@@ -406,7 +406,7 @@ class CloudKitManager: ObservableObject {
 
             pendingRequests = requests
         } catch {
-            print("❌ fetchPendingRequests failed: \(error.localizedDescription)")
+            print("fetchPendingRequests failed: \(error.localizedDescription)")
         }
     }
 
@@ -420,10 +420,10 @@ class CloudKitManager: ObservableObject {
             await MainActor.run {
                 pendingRequests.removeAll { $0.id == request.id }
             }
-            print("✅ Accepted friend request from \(request.requesterName)")
+            print("Accepted friend request from \(request.requesterName)")
             Task { @MainActor in await refreshFriendsNow(reason: "accept") }
         } catch {
-            print("❌ acceptFriendRequest failed: \(error.localizedDescription)")
+            print("acceptFriendRequest failed: \(error.localizedDescription)")
             throw error
         }
     }
@@ -438,18 +438,49 @@ class CloudKitManager: ObservableObject {
             await MainActor.run {
                 pendingRequests.removeAll { $0.id == request.id }
             }
-            print("✅ Declined friend request from \(request.requesterName)")
+            print("Declined friend request from \(request.requesterName)")
         } catch {
-            print("❌ declineFriendRequest failed: \(error.localizedDescription)")
+            print("declineFriendRequest failed: \(error.localizedDescription)")
             throw error
         }
     }
 
+    // Remove an accepted friend from the leaderboard by marking the friendship as removed.
+    func removeFriend(userID friendUserID: String) async throws {
+        let sentQuery = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@ AND status == 'accepted'", myID, friendUserID))
+        let receivedQuery = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@ AND status == 'accepted'", friendUserID, myID))
+
+        let (sentResults, _) = try await database.records(matching: sentQuery)
+        let (receivedResults, _) = try await database.records(matching: receivedQuery)
+        let records = (sentResults + receivedResults).compactMap { _, result in
+            if case .success(let record) = result { return record }
+            return nil
+        }
+
+        guard !records.isEmpty else { throw FriendError.notFriends }
+
+        for record in records {
+            record["status"] = "removed"
+            record["updated_at"] = Date()
+            _ = try await database.save(record)
+        }
+
+        await MainActor.run {
+            friends.removeAll { $0.userID == friendUserID }
+            cacheLeaderboardData(forceWidgetReload: true)
+        }
+        print("Removed friend \(friendUserID)")
+    }
+
     enum FriendError: LocalizedError {
         case alreadyExists
+        case notFriends
         var errorDescription: String? {
             switch self {
             case .alreadyExists: return "You already have a friendship or pending request with this person."
+            case .notFriends: return "That friend connection was already removed or could not be found."
             }
         }
     }
@@ -465,7 +496,7 @@ class CloudKitManager: ObservableObject {
         }
         let toDelete = records.map(\.recordID).filter { $0 != myUserProfileRecordID }
         guard !toDelete.isEmpty else { return }
-        print("🧹 Deleting \(toDelete.count) duplicate profile(s)")
+        print("Deleting \(toDelete.count) duplicate profile(s)")
         for recordID in toDelete {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 database.delete(withRecordID: recordID) { _, error in
@@ -513,7 +544,7 @@ class CloudKitManager: ObservableObject {
         } catch {
             let retryAfter = (error as? CKError)?.userInfo[CKErrorRetryAfterKey] as? Double
             let code = (error as? CKError)?.code.rawValue
-            print("❌ Background sync failed: \(error.localizedDescription)")
+            print("Background sync failed: \(error.localizedDescription)")
             return (false, error.localizedDescription, code, retryAfter)
         }
     }
@@ -548,7 +579,7 @@ class CloudKitManager: ObservableObject {
         if let data = sharedDefaults?.data(forKey: AppConstants.Keys.cachedLeaderboardData),
            let cached = try? CloudKitManager.jsonDecoder.decode([MemberData].self, from: data) {
             self.friends = cached
-            print("💾 Loaded \(cached.count) cached friends from disk")
+            print("Loaded \(cached.count) cached friends from disk")
         }
     }
 
@@ -586,17 +617,17 @@ class CloudKitManager: ObservableObject {
         sharedDefaults?.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
         sharedDefaults?.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-        print("🔄 Reset local block count to 0 — uploading to CloudKit...")
+        print("Reset local block count to 0 - uploading to CloudKit...")
 
         Task {
             do {
                 try await saveProfileToCloud(blocks: 0)
-                print("✅ Reset uploaded to CloudKit")
+                print("Reset uploaded to CloudKit")
                 await MainActor.run { [weak self] in
                     Task { await self?.refreshFriendsNow(reason: "reset") }
                 }
             } catch {
-                print("❌ Reset upload failed: \(error.localizedDescription)")
+                print("Reset upload failed: \(error.localizedDescription)")
             }
             completion?()
         }

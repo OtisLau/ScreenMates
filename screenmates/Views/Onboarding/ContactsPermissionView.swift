@@ -285,7 +285,7 @@ struct ContactsPermissionView: View {
                 return ContactMatch(contactName: name, displayName: profile.displayName, userID: profile.userID)
             }
         } catch {
-            print("❌ fetchUsersByPhoneHashes failed: \(error)")
+            print("fetchUsersByPhoneHashes failed: \(error)")
             return []
         }
     }
