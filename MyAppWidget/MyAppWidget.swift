@@ -237,7 +237,7 @@ struct MyAppWidgetEntryView: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 4)
+        .padding(.top, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { WidgetDotGrid() }
         .overlay {
