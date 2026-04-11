@@ -210,41 +210,36 @@ struct MyAppWidgetEntryView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                WidgetDotGrid()
-                    .frame(width: geo.size.width, height: geo.size.height)
+        ZStack {
+            WidgetDotGrid()
 
-                if entry.members.isEmpty {
-                    Text("Open app to start")
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.55))
-                        .frame(width: geo.size.width, height: geo.size.height)
-                } else {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
-                            WidgetMemberRow(
-                                rank: index + 1,
-                                member: member,
-                                blockSize: entry.blockSizeMinutes,
-                                isTop: index == 0
-                            )
-                            .padding(.vertical, 10)
-                            if index < entry.members.count - 1 {
-                                Rectangle()
-                                    .fill(Color.white.opacity(0.07))
-                                    .frame(height: 1)
-                            }
+            if entry.members.isEmpty {
+                Text("Open app to start")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.55))
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(entry.members.enumerated()), id: \.element.id) { index, member in
+                        WidgetMemberRow(
+                            rank: index + 1,
+                            member: member,
+                            blockSize: entry.blockSizeMinutes,
+                            isTop: index == 0
+                        )
+                        .padding(.vertical, 10)
+                        if index < entry.members.count - 1 {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.07))
+                                .frame(height: 1)
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .frame(width: geo.size.width, height: geo.size.height)
                 }
+                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
 
-                if entry.myGoalMinutes > 0 {
-                    WidgetProgressBorder(remaining: myRemaining)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                }
+            if entry.myGoalMinutes > 0 {
+                WidgetProgressBorder(remaining: myRemaining)
             }
         }
     }
