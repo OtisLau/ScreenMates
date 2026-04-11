@@ -2,9 +2,9 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject private var cloudManager = CloudKitManager.shared
+    @ObservedObject private var phoneAuth = PhoneAuthManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showingDebugMenu = false
-    @State private var codeCopied = false
 
     @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
     @State private var notificationPermissionDenied = false
@@ -45,46 +45,22 @@ struct SettingsView: View {
                         label: "Display Name",
                         value: cloudManager.myDisplayName.isEmpty ? "Not set" : cloudManager.myDisplayName
                     )
-                    // Friend code — tap to copy
-                    Button {
-                        UIPasteboard.general.string = cloudManager.myFriendCode
-                        codeCopied = true
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .seconds(1.8))
-                            codeCopied = false
-                        }
-                    } label: {
-                        HStack {
-                            Image(systemName: "number")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 20)
-                            Text("Friend Code")
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Text(cloudManager.myFriendCode)
-                                .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                            Image(systemName: codeCopied ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 12))
-                                .foregroundStyle(codeCopied ? Color(UIColor.systemGreen) : Color(UIColor.tertiaryLabel))
-                                .animation(.easeInOut(duration: 0.2), value: codeCopied)
-                        }
-                    }
-                    .buttonStyle(.plain)
                 }
 
-                // Friends
-                Section {
-                    NavigationLink {
-                        ContactsPermissionView()
-                    } label: {
-                        settingsRow(icon: "person.2", label: "Find Friends", value: "")
+                // Find Friends — only shown if contacts permission hasn't been handled yet.
+                // Once granted, suggested friends appear in the Friends sheet instead.
+                if !phoneAuth.contactsHandled {
+                    Section {
+                        NavigationLink {
+                            ContactsPermissionView()
+                        } label: {
+                            settingsRow(icon: "person.2", label: "Find Friends", value: "")
+                        }
+                    } header: {
+                        Text("Friends")
+                    } footer: {
+                        Text("Search your contacts for people already on ScreenMates")
                     }
-                } header: {
-                    Text("Friends")
-                } footer: {
-                    Text("Search your contacts for people already on ScreenMates")
                 }
 
                 // Notifications — only show toggle if permission isn't already granted
