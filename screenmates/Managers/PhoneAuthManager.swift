@@ -1,11 +1,11 @@
 import Foundation
+import Combine
 import CryptoKit
 
 /// Manages phone verification state and local identity storage.
 /// The source of truth for whether the user has completed phone auth
 /// and contacts discovery.
-@MainActor
-final class PhoneAuthManager: ObservableObject {
+class PhoneAuthManager: ObservableObject {
     static let shared = PhoneAuthManager()
 
     @Published private(set) var isPhoneVerified: Bool
@@ -39,7 +39,7 @@ final class PhoneAuthManager: ObservableObject {
         defaults.set(true,           forKey: AppConstants.Keys.isPhoneVerified)
 
         // Push phone_hash to the user's CloudKit UserProfile so friends can discover them.
-        CloudKitManager.shared.phoneHash = hash
+        // CloudKitManager.saveProfileToCloud reads PhoneAuthManager.shared.phoneHash directly.
         CloudKitManager.shared.updateMyProfile(completion: nil)
     }
 
