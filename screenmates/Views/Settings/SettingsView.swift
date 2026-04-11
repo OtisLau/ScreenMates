@@ -214,11 +214,7 @@ struct SettingsView: View {
             .sheet(isPresented: $showingDebugMenu) {
                 DebugMenuView()
             }
-            .confirmationDialog(
-                "Deactivate account?",
-                isPresented: $showingDeactivateConfirmation,
-                titleVisibility: .visible
-            ) {
+            .alert("Deactivate account?", isPresented: $showingDeactivateConfirmation) {
                 Button("Deactivate Account", role: .destructive) {
                     deactivateAccount()
                 }
