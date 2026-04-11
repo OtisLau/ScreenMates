@@ -45,6 +45,14 @@ struct DiagnosticView: View {
                         .buttonStyle(.bordered)
 
                         Button {
+                            reuploadPhoneHash()
+                        } label: {
+                            Text("Re-upload Phone Hash")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button {
                             cloudKitPing()
                         } label: {
                             if isPingingCloudKit {
@@ -113,6 +121,17 @@ struct DiagnosticView: View {
         }
         result += "\n"
         
+        // Phone auth / contacts discovery
+        result += "PHONE AUTH:\n"
+        let phoneNum = PhoneAuthManager.shared.phoneNumberE164
+        let phoneHash = PhoneAuthManager.shared.phoneHash
+        result += "  E164: '\(phoneNum.isEmpty ? "NOT SET" : phoneNum)'\n"
+        result += "  Hash: '\(phoneHash.isEmpty ? "NOT SET — contacts won't match" : String(phoneHash.prefix(12)) + "...")'\n"
+        if phoneHash.isEmpty {
+            result += "  ⚠️ No phone hash — tap 'Re-upload Phone Hash' to fix\n"
+        }
+        result += "\n"
+
         // Check sync status
         if let lastSync = cloudManager.lastSyncTime {
             result += "SYNC STATUS:\n"
@@ -122,10 +141,28 @@ struct DiagnosticView: View {
             result += "SYNC STATUS:\n"
             result += "   Never synced\n"
         }
-        
+
         diagnosticResult = result
     }
     
+    private func reuploadPhoneHash() {
+        let hash = PhoneAuthManager.shared.phoneHash
+        let e164 = PhoneAuthManager.shared.phoneNumberE164
+        if hash.isEmpty {
+            diagnosticResult += "\n\n⚠️ No phone hash stored locally — go through phone number setup first\n"
+            return
+        }
+        diagnosticResult += "\n\n Uploading phone hash to CloudKit...\n"
+        diagnosticResult += "  E164: \(e164)\n"
+        diagnosticResult += "  Hash prefix: \(String(hash.prefix(12)))...\n"
+        cloudManager.updateMyProfile {
+            Task { @MainActor in
+                diagnosticResult += " Done — hash uploaded.\n"
+                runDiagnostics()
+            }
+        }
+    }
+
     private func fixDisplayName() {
         cloudManager.myDisplayName = "TestUser"
         cloudManager.usernameSet = true

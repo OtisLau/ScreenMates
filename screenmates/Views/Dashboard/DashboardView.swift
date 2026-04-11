@@ -12,6 +12,13 @@ struct DashboardView: View {
         cloudManager.currentBlocksUsed * AppConstants.currentBlockSize
     }
 
+    private var friendsButtonAccessibilityLabel: String {
+        let count = cloudManager.pendingRequests.count
+        guard count > 0 else { return "Friends" }
+        let requestText = count == 1 ? "pending friend request" : "pending friend requests"
+        return "Friends, \(count) \(requestText)"
+    }
+
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
@@ -95,17 +102,21 @@ struct DashboardView: View {
                     Button {
                         showingFriends = true
                     } label: {
-                        Image(systemName: "person.2.fill")
-                            .overlay(alignment: .topTrailing) {
-                                if cloudManager.pendingRequests.count > 0 {
-                                    Circle()
-                                        .fill(Color.red)
-                                        .frame(width: 7, height: 7)
-                                        .offset(x: 4, y: -4)
-                                }
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "person.2.fill")
+
+                            if cloudManager.pendingRequests.count > 0 {
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 11, height: 11)
+                                    .offset(x: -3, y: 3)
+                                    .accessibilityHidden(true)
                             }
+                        }
+                        .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(friendsButtonAccessibilityLabel)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {

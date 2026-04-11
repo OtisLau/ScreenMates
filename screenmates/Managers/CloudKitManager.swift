@@ -225,13 +225,16 @@ class CloudKitManager: ObservableObject {
     }
 
     func fetchFriendsAsync() async throws -> [MemberData] {
-        // Step 1: find all accepted friendships involving me
-        let asSender    = NSPredicate(format: "requester_user_id == %@ AND status == 'accepted'", myID)
-        let asRecipient = NSPredicate(format: "recipient_user_id == %@ AND status == 'accepted'", myID)
-        let friendshipPredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [asSender, asRecipient])
-        let friendshipQuery = CKQuery(recordType: "Friendship", predicate: friendshipPredicate)
+        // Step 1: find all accepted friendships involving me.
+        // CloudKit doesn't support OR with multi-condition branches, so run two queries.
+        let sentQuery     = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "requester_user_id == %@ AND status == 'accepted'", myID))
+        let receivedQuery = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "recipient_user_id == %@ AND status == 'accepted'", myID))
 
-        let (friendshipResults, _) = try await database.records(matching: friendshipQuery)
+        let (sentResults, _)     = try await database.records(matching: sentQuery)
+        let (receivedResults, _) = try await database.records(matching: receivedQuery)
+        let friendshipResults    = sentResults + receivedResults
 
         var friendIDs: [String] = []
         for (_, result) in friendshipResults {
@@ -305,7 +308,7 @@ class CloudKitManager: ObservableObject {
     // Look up a UserProfile by friend code (first 6 chars of user_id, case-insensitive).
     // Returns nil if not found or if the code matches the current user.
     func lookupUserByFriendCode(_ code: String) async throws -> (userID: String, displayName: String)? {
-        let prefix = code.lowercased()
+        let prefix = code.uppercased()
         guard prefix.count == 6 else { return nil }
         let predicate = NSPredicate(format: "user_id BEGINSWITH %@", prefix)
         let query = CKQuery(recordType: "UserProfile", predicate: predicate)
@@ -324,13 +327,17 @@ class CloudKitManager: ObservableObject {
 
     // Send a friend request to another user. Creates a Friendship record with status "pending".
     func sendFriendRequest(toUserID: String) async throws {
-        // Check we don't already have a friendship with this person
-        let existing1 = NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@", myID, toUserID)
-        let existing2 = NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@", toUserID, myID)
-        let existingPredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [existing1, existing2])
-        let checkQuery = CKQuery(recordType: "Friendship", predicate: existingPredicate)
-        let (existing, _) = try await database.records(matching: checkQuery, resultsLimit: 1)
-        if !existing.isEmpty { throw FriendError.alreadyExists }
+        // Check we don't already have a friendship with this person.
+        // CloudKit doesn't support OR with multi-condition branches, so run two queries.
+        let sentQuery = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@", myID, toUserID))
+        let (sentResults, _) = try await database.records(matching: sentQuery, resultsLimit: 1)
+        if !sentResults.isEmpty { throw FriendError.alreadyExists }
+
+        let receivedQuery = CKQuery(recordType: "Friendship",
+            predicate: NSPredicate(format: "requester_user_id == %@ AND recipient_user_id == %@", toUserID, myID))
+        let (receivedResults, _) = try await database.records(matching: receivedQuery, resultsLimit: 1)
+        if !receivedResults.isEmpty { throw FriendError.alreadyExists }
 
         let record = CKRecord(recordType: "Friendship")
         record["requester_user_id"] = myID
@@ -404,7 +411,7 @@ class CloudKitManager: ObservableObject {
     }
 
     // Accept an incoming friend request — sets status to "accepted".
-    func acceptFriendRequest(_ request: FriendRequest) async {
+    func acceptFriendRequest(_ request: FriendRequest) async throws {
         do {
             let record = try await database.record(for: request.recordID)
             record["status"]     = "accepted"
@@ -417,11 +424,12 @@ class CloudKitManager: ObservableObject {
             Task { @MainActor in await refreshFriendsNow(reason: "accept") }
         } catch {
             print("❌ acceptFriendRequest failed: \(error.localizedDescription)")
+            throw error
         }
     }
 
     // Decline or remove — sets status to "rejected".
-    func declineFriendRequest(_ request: FriendRequest) async {
+    func declineFriendRequest(_ request: FriendRequest) async throws {
         do {
             let record = try await database.record(for: request.recordID)
             record["status"]     = "rejected"
@@ -433,6 +441,7 @@ class CloudKitManager: ObservableObject {
             print("✅ Declined friend request from \(request.requesterName)")
         } catch {
             print("❌ declineFriendRequest failed: \(error.localizedDescription)")
+            throw error
         }
     }
 

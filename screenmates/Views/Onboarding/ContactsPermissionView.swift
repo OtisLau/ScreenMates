@@ -278,11 +278,15 @@ struct ContactsPermissionView: View {
 
         guard !hashToName.isEmpty else { return [] }
 
-        let profiles = (try? await CloudKitManager.shared.fetchUsersByPhoneHashes(Array(hashToName.keys))) ?? []
-
-        return profiles.compactMap { profile in
-            guard let name = hashToName[profile.phoneHash] else { return nil }
-            return ContactMatch(contactName: name, displayName: profile.displayName, userID: profile.userID)
+        do {
+            let profiles = try await CloudKitManager.shared.fetchUsersByPhoneHashes(Array(hashToName.keys))
+            return profiles.compactMap { profile in
+                guard let name = hashToName[profile.phoneHash] else { return nil }
+                return ContactMatch(contactName: name, displayName: profile.displayName, userID: profile.userID)
+            }
+        } catch {
+            print("❌ fetchUsersByPhoneHashes failed: \(error)")
+            return []
         }
     }
 }

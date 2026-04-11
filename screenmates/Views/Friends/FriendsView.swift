@@ -1,5 +1,6 @@
 import SwiftUI
 import Contacts
+import CloudKit
 
 struct FriendsView: View {
     @ObservedObject private var cloudManager = CloudKitManager.shared
@@ -10,6 +11,8 @@ struct FriendsView: View {
     @State private var codeCopied = false
     @State private var suggestedFriends: [ContactMatch] = []
     @State private var isLoadingSuggestions = false
+    @State private var processingRequestIDs: Set<String> = []
+    @State private var requestErrorMessage: String?
 
     enum LookupState: Equatable {
         case idle
@@ -121,11 +124,19 @@ struct FriendsView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Button("Decline") { Task { await cloudManager.declineFriendRequest(request) } }
-                                    .buttonStyle(.bordered).tint(.red)
-                                Button("Accept") { Task { await cloudManager.acceptFriendRequest(request) } }
-                                    .buttonStyle(.borderedProminent).tint(.blue)
+                                if processingRequestIDs.contains(request.id) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    requestActionButton("Decline", color: .red, isProminent: false) {
+                                        Task { await respond(to: request, accepting: false) }
+                                    }
+                                    requestActionButton("Accept", color: .blue, isProminent: true) {
+                                        Task { await respond(to: request, accepting: true) }
+                                    }
+                                }
                             }
+                            .contentShape(Rectangle())
                         }
                     }
                 }
@@ -197,6 +208,14 @@ struct FriendsView: View {
                     await loadSuggestions()
                 }
             }
+            .alert("Friend request failed", isPresented: Binding(
+                get: { requestErrorMessage != nil },
+                set: { if !$0 { requestErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { requestErrorMessage = nil }
+            } message: {
+                Text(requestErrorMessage ?? "Something went wrong.")
+            }
         }
     }
 
@@ -241,14 +260,66 @@ struct FriendsView: View {
         }
         guard !hashToName.isEmpty else { return [] }
 
-        let profiles = (try? await CloudKitManager.shared.fetchUsersByPhoneHashes(Array(hashToName.keys))) ?? []
-        return profiles.compactMap { profile in
-            guard let name = hashToName[profile.phoneHash] else { return nil }
-            return ContactMatch(contactName: name, displayName: profile.displayName, userID: profile.userID)
+        do {
+            let profiles = try await CloudKitManager.shared.fetchUsersByPhoneHashes(Array(hashToName.keys))
+            return profiles.compactMap { profile in
+                guard let name = hashToName[profile.phoneHash] else { return nil }
+                return ContactMatch(contactName: name, displayName: profile.displayName, userID: profile.userID)
+            }
+        } catch {
+            print("❌ fetchUsersByPhoneHashes failed: \(error)")
+            return []
         }
     }
 
     // MARK: - Actions
+
+    private func requestActionButton(
+        _ title: String,
+        color: Color,
+        isProminent: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isProminent ? Color.white : color)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 7)
+                .background {
+                    Capsule()
+                        .fill(color.opacity(isProminent ? 1 : 0.22))
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @MainActor
+    private func respond(to request: FriendRequest, accepting: Bool) async {
+        guard !processingRequestIDs.contains(request.id) else { return }
+
+        processingRequestIDs.insert(request.id)
+        defer { processingRequestIDs.remove(request.id) }
+
+        do {
+            if accepting {
+                try await cloudManager.acceptFriendRequest(request)
+            } else {
+                try await cloudManager.declineFriendRequest(request)
+            }
+        } catch {
+            requestErrorMessage = friendRequestErrorMessage(from: error)
+        }
+    }
+
+    private func friendRequestErrorMessage(from error: Error) -> String {
+        if let ckError = error as? CKError, ckError.code == .permissionFailure {
+            return """
+            CloudKit rejected the update. In the Development schema, Friendship needs Write permission for authenticated iCloud users, not just the record creator.
+            """
+        }
+        return error.localizedDescription
+    }
 
     private func lookupFriend() async {
         lookupState = .searching
