@@ -4,6 +4,7 @@ import CryptoKit
 /// Manages phone verification state and local identity storage.
 /// The source of truth for whether the user has completed phone auth
 /// and contacts discovery.
+@MainActor
 final class PhoneAuthManager: ObservableObject {
     static let shared = PhoneAuthManager()
 

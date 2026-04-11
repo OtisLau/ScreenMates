@@ -11,7 +11,7 @@ struct ContactMatch: Identifiable {
 /// Requests contacts permission, hashes contact phone numbers, queries CloudKit
 /// for matching UserProfiles, and shows results. Skippable at any point.
 struct ContactsPermissionView: View {
-    @StateObject private var auth = PhoneAuthManager.shared
+    @ObservedObject private var auth = PhoneAuthManager.shared
 
     @State private var isSearching = false
     @State private var matches: [ContactMatch] = []
