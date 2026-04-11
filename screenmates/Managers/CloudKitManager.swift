@@ -240,14 +240,14 @@ class CloudKitManager: ObservableObject {
         }
     }
 
-    // Update the group's shared daily limit in CloudKit
+    // Update the daily limit locally and (if in a group) in CloudKit.
     func updateGroupGoal(_ minutes: Int) {
-        guard !myGroupID.isEmpty else { return }
         groupGoalMinutes = minutes
         lastGoalUpdateTime = Date()
         UserDefaults.standard.set(minutes, forKey: "cached_group_goal_minutes")
         sharedDefaults?.set(minutes, forKey: AppConstants.Keys.sharedGoalMinutes)
 
+        guard !myGroupID.isEmpty else { return }
         let recordID = CKRecord.ID(recordName: myGroupID)
         database.fetch(withRecordID: recordID) { [weak self] record, error in
             guard let self else { return }
