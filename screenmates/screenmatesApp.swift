@@ -60,7 +60,7 @@ struct ScreenMatesApp: App {
         if MonitoringManager.shared.performHardDayRolloverResetIfNeeded() {
             guard reserveRestartSlotIfNeeded(context: context) else { return }
             print(" New day detected (\(context)) — rolling over and restarting monitoring")
-            MonitoringManager.shared.restartMonitoring()
+            restartMonitoring(reason: "day rollover", context: context)
             return
         }
 
@@ -71,7 +71,7 @@ struct ScreenMatesApp: App {
         guard activities.contains(DeviceActivityName("dailyTracking")) else {
             guard reserveRestartSlotIfNeeded(context: context) else { return }
             print(" Monitoring dead (\(context)) — auto-restarting")
-            MonitoringManager.shared.restartMonitoring()
+            restartMonitoring(reason: "inactive monitor", context: context)
             return
         }
 
@@ -85,7 +85,14 @@ struct ScreenMatesApp: App {
             guard reserveRestartSlotIfNeeded(context: context) else { return }
             print(" Batch exhausted at block_\(lastIndex) (\(context)) — rolling over")
             sharedDefaults?.set(lastIndex, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
-            MonitoringManager.shared.restartMonitoring()
+            restartMonitoring(reason: "batch exhausted", context: context)
+        }
+    }
+
+    nonisolated private static func restartMonitoring(reason: String, context: String) {
+        let restarted = MonitoringManager.shared.restartMonitoring()
+        if !restarted {
+            print(" Monitoring restart failed (\(reason), \(context))")
         }
     }
 

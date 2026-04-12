@@ -46,12 +46,16 @@ nonisolated class MonitoringManager {
     // Re-register monitoring with a completely fresh batch of events starting from block_1.
     func restartMonitoringInBackground(priority: TaskPriority = .utility) {
         Task.detached(priority: priority) {
-            MonitoringManager.shared.restartMonitoring()
+            let restarted = MonitoringManager.shared.restartMonitoring()
+            if !restarted {
+                print(" Background monitoring restart did not complete")
+            }
         }
     }
 
     // Re-register monitoring with a completely fresh batch of events starting from block_1.
-    func restartMonitoring() {
+    @discardableResult
+    func restartMonitoring() -> Bool {
         let selection: FamilyActivitySelection? = {
             guard let data = defaults.data(forKey: selectionKey) else { return nil }
             return try? JSONDecoder().decode(FamilyActivitySelection.self, from: data)
@@ -59,7 +63,7 @@ nonisolated class MonitoringManager {
 
         if !AppConstants.monitorAllActivity && selection == nil {
             print(" No saved selection — open the app from scratch to reconfigure monitoring")
-            return
+            return false
         }
 
         _ = performHardDayRolloverResetIfNeeded()
@@ -124,7 +128,7 @@ nonisolated class MonitoringManager {
 
         guard !events.isEmpty else {
             print(" No valid events to register — already at the 24-hour ceiling")
-            return
+            return false
         }
 
         let schedule = DeviceActivitySchedule(
@@ -139,8 +143,10 @@ nonisolated class MonitoringManager {
         do {
             try center.startMonitoring(DeviceActivityName("dailyTracking"), during: schedule, events: events)
             print(" Monitoring restarted from block_1 with \(events.count) events")
+            return true
         } catch {
             print(" Failed to restart monitoring: \(error)")
+            return false
         }
     }
 }
