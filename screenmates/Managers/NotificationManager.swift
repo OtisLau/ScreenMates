@@ -161,8 +161,16 @@ class NotificationManager {
 
     // MARK: - Deduplication
 
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = .current
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
     private func dayBucketString(date: Date = Date()) -> String {
-        String(Int(date.timeIntervalSince1970) / 86_400)
+        Self.dayFormatter.string(from: date)
     }
 
     private func hasAlreadySent(key: String) -> Bool {
