@@ -134,14 +134,18 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             members = decoded
         }
 
+        let postMidnightBlocks = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
+
         if let idx = members.firstIndex(where: { $0.userID == userID }) {
             members[idx] = CachedMember(id: userID, userID: userID,
                                         displayName: displayName,
-                                        blocks: currentBlocks, lastUpdate: Date())
+                                        blocks: currentBlocks, lastUpdate: Date(),
+                                        postMidnightBlocks: postMidnightBlocks)
         } else {
             members.append(CachedMember(id: userID, userID: userID,
                                         displayName: displayName,
-                                        blocks: currentBlocks, lastUpdate: Date()))
+                                        blocks: currentBlocks, lastUpdate: Date(),
+                                        postMidnightBlocks: postMidnightBlocks))
         }
 
         if let encoded = try? JSONEncoder().encode(members) {
