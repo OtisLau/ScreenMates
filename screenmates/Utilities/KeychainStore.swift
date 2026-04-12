@@ -41,7 +41,10 @@ enum KeychainStore {
         if status == errSecItemNotFound {
             var addQuery = query
             addQuery[kSecValueData as String] = data
-            _ = SecItemAdd(addQuery as CFDictionary, nil)
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            logKeychainError("add stable user ID", status: addStatus)
+        } else {
+            logKeychainError("update stable user ID", status: status)
         }
     }
 
@@ -63,5 +66,10 @@ enum KeychainStore {
         saveStableUserID(created)
         return created
     }
-}
 
+    private static func logKeychainError(_ operation: String, status: OSStatus) {
+        guard status != errSecSuccess else { return }
+        let message = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
+        print("Keychain \(operation) failed: \(message)")
+    }
+}
