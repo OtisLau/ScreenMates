@@ -1,11 +1,13 @@
 import DeviceActivity
 import ManagedSettings
 import Foundation
+import Darwin
 
 class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     let suiteName = "group.com.otishlau.screenmates"
     private let lastThresholdIndexKey = "LastThresholdIndex"
+    private let sharedStateLockName = "ScreenMatesExtensionState.lock"
 
     private lazy var sharedDefaults: UserDefaults? = UserDefaults(suiteName: suiteName)
 
@@ -30,6 +32,12 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         sharedDefaults.set(Date(), forKey: "LastExtensionWakeDate")
         sharedDefaults.set(event.rawValue, forKey: "LastExtensionWakeEvent")
 
+        withSharedStateLock {
+            processThresholdEvent(event, sharedDefaults: sharedDefaults)
+        }
+    }
+
+    private func processThresholdEvent(_ event: DeviceActivityEvent.Name, sharedDefaults: UserDefaults) {
         // Ignore events from yesterday's schedule — app will restart monitoring on next wake.
         let lastBlockDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? .distantPast
         guard Calendar.current.isDateInToday(lastBlockDate) else {
@@ -74,6 +82,31 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         print("Threshold hit. Daily total: \(currentBlocks) blocks")
 
         updateWidgetCache(sharedDefaults: sharedDefaults, currentBlocks: currentBlocks)
+    }
+
+    private func withSharedStateLock(_ body: () -> Void) {
+        guard let lockURL = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: suiteName)?
+            .appendingPathComponent(sharedStateLockName)
+        else {
+            body()
+            return
+        }
+
+        let fd = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else {
+            body()
+            return
+        }
+        defer { close(fd) }
+
+        guard flock(fd, LOCK_EX) == 0 else {
+            body()
+            return
+        }
+        defer { flock(fd, LOCK_UN) }
+
+        body()
     }
 
     // Minimal struct matching the JSON schema of CachedMember in the main app.
