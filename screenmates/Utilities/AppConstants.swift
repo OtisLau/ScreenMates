@@ -19,6 +19,7 @@ nonisolated struct AppConstants {
 
     // Public URL for the Cloudflare Worker that proxies Twilio Verify.
     static let phoneAuthWorkerBaseURL = "https://screenmates-phone-auth.otishlau.workers.dev"
+    static let phoneAuthWorkerSecret  = "REDACTED"
 
     // 0:00 -> 23:59 = 1439 total threshold minutes in a day.
     static let maxThresholdMinuteOfDay = (24 * 60) - 1
