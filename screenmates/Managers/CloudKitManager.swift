@@ -58,6 +58,7 @@ class CloudKitManager: ObservableObject {
     private static let jsonEncoder = JSONEncoder()
     private static let jsonDecoder = JSONDecoder()
     private static let friendRequestSubscriptionRetryInterval: TimeInterval = 60 * 60
+    private static let friendRequestSubscriptionValidationInterval: TimeInterval = 7 * 24 * 60 * 60
 
     // Throttle widget timeline reloads to avoid OOM-killing the widget process.
     private var lastWidgetReload: Date = .distantPast
@@ -730,15 +731,42 @@ class CloudKitManager: ObservableObject {
     func registerFriendRequestSubscription() async {
         guard !myID.isEmpty else { return }
 
+        let defaults = UserDefaults.standard
         let flagKey = "friendRequestSubRegistered-\(myID)"
-        guard !UserDefaults.standard.bool(forKey: flagKey) else { return }
         let attemptKey = "friendRequestSubLastAttempt-\(myID)"
+        let validationKey = "friendRequestSubLastValidation-\(myID)"
+        let subscriptionID = "friend-request-incoming-\(myID)"
         let now = Date()
-        if let lastAttempt = UserDefaults.standard.object(forKey: attemptKey) as? Date,
+
+        if defaults.bool(forKey: flagKey) {
+            if let lastValidation = defaults.object(forKey: validationKey) as? Date,
+               now.timeIntervalSince(lastValidation) < Self.friendRequestSubscriptionValidationInterval {
+                return
+            }
+
+            do {
+                _ = try await database.subscription(for: subscriptionID)
+                defaults.set(now, forKey: validationKey)
+                return
+            } catch {
+                if isMissingCloudKitSubscriptionError(error) {
+                    defaults.set(false, forKey: flagKey)
+                    defaults.removeObject(forKey: validationKey)
+                    defaults.removeObject(forKey: attemptKey)
+                    print("Friend request subscription missing; re-registering")
+                } else {
+                    defaults.set(now, forKey: validationKey)
+                    print("Friend request subscription validation failed: \(error)")
+                    return
+                }
+            }
+        }
+
+        if let lastAttempt = defaults.object(forKey: attemptKey) as? Date,
            now.timeIntervalSince(lastAttempt) < Self.friendRequestSubscriptionRetryInterval {
             return
         }
-        UserDefaults.standard.set(now, forKey: attemptKey)
+        defaults.set(now, forKey: attemptKey)
 
         let predicate = NSPredicate(
             format: "recipient_user_id == %@ AND status == 'pending'",
@@ -747,7 +775,7 @@ class CloudKitManager: ObservableObject {
         let subscription = CKQuerySubscription(
             recordType: "Friendship",
             predicate: predicate,
-            subscriptionID: "friend-request-incoming-\(myID)",
+            subscriptionID: subscriptionID,
             options: .firesOnRecordCreation
         )
 
@@ -758,10 +786,16 @@ class CloudKitManager: ObservableObject {
 
         do {
             _ = try await database.save(subscription)
-            UserDefaults.standard.set(true, forKey: flagKey)
+            defaults.set(true, forKey: flagKey)
+            defaults.set(now, forKey: validationKey)
         } catch {
             print("registerFriendRequestSubscription failed: \(error)")
         }
+    }
+
+    private func isMissingCloudKitSubscriptionError(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError else { return false }
+        return ckError.code == .unknownItem
     }
 
     // Fetches the display name for a given user ID. Used by the app delegate to
