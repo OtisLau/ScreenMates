@@ -15,11 +15,10 @@ nonisolated struct AppConstants {
     // MARK: - Phone Auth
     // Accept any 6-digit code without calling Twilio. Flip to false once the
     // Twilio proxy (Cloudflare Worker) is deployed and credentials are set.
-    static let skipOTPVerification = true
+    static let skipOTPVerification = false
 
     // Public URL for the Cloudflare Worker that proxies Twilio Verify.
-    // Example: https://screenmates-phone-auth.<your-subdomain>.workers.dev
-    static let phoneAuthWorkerBaseURL = ""
+    static let phoneAuthWorkerBaseURL = "https://screenmates-phone-auth.otishlau.workers.dev"
 
     // 0:00 -> 23:59 = 1439 total threshold minutes in a day.
     static let maxThresholdMinuteOfDay = (24 * 60) - 1
