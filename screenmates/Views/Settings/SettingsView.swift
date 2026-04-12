@@ -25,6 +25,7 @@ struct SettingsView: View {
     }
 
     private func saveLimit() {
+        Haptics.success()
         cloudManager.updatePersonalGoal(limitHours * 60 + limitMinutes)
     }
 
@@ -337,6 +338,7 @@ private struct EditDisplayNameView: View {
     private func saveDisplayName() {
         guard isNameValid, hasChanges else { return }
 
+        Haptics.medium()
         isSaving = true
         cloudManager.myDisplayName = trimmedDisplayName
         cloudManager.usernameSet = true

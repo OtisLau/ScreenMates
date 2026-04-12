@@ -266,6 +266,7 @@ struct ContactsPermissionView: View {
     // MARK: - Logic
 
     private func requestContacts() {
+        Haptics.medium()
         let store = CNContactStore()
         let status = CNContactStore.authorizationStatus(for: .contacts)
 
@@ -310,6 +311,7 @@ struct ContactsPermissionView: View {
     }
 
     private func toggleSelection(for match: ContactMatch) {
+        Haptics.soft()
         if selectedUserIDs.contains(match.userID) {
             selectedUserIDs.remove(match.userID)
         } else {
@@ -321,9 +323,11 @@ struct ContactsPermissionView: View {
     private func continueFromMatches() async {
         guard !isSendingRequests else { return }
         guard !selectedUserIDs.isEmpty else {
+            Haptics.soft()
             auth.markContactsHandled()
             return
         }
+        Haptics.medium()
 
         isSendingRequests = true
         defer { isSendingRequests = false }

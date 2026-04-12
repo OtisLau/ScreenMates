@@ -45,6 +45,7 @@ struct FriendsView: View {
                 Section("Your Code") {
                     HStack(spacing: 12) {
                         Button {
+                            Haptics.soft()
                             UIPasteboard.general.string = cloudManager.myFriendCode
                             withAnimation(.easeInOut(duration: 0.15)) { codeCopied = true }
                             Task { @MainActor in
@@ -374,6 +375,7 @@ struct FriendsView: View {
     private func respond(to request: FriendRequest, accepting: Bool) async {
         guard !processingRequestIDs.contains(request.id) else { return }
 
+        accepting ? Haptics.success() : Haptics.warning()
         processingRequestIDs.insert(request.id)
         defer { processingRequestIDs.remove(request.id) }
 
@@ -413,6 +415,7 @@ struct FriendsView: View {
 
     @MainActor
     private func sendSuggestionRequest(to suggestion: ContactMatch) async {
+        Haptics.medium()
         guard !sendingSuggestionIDs.contains(suggestion.userID),
               !pendingSuggestionIDs.contains(suggestion.userID)
         else { return }
@@ -459,6 +462,7 @@ struct FriendsView: View {
     }
 
     private func lookupFriend() async {
+        Haptics.medium()
         lookupState = .searching
         do {
             if let result = try await cloudManager.lookupUserByFriendCode(addCode) {
@@ -472,6 +476,7 @@ struct FriendsView: View {
     }
 
     private func sendRequest(toUserID: String, displayName: String) async {
+        Haptics.medium()
         lookupState = .sending
         do {
             try await cloudManager.sendFriendRequest(toUserID: toUserID)

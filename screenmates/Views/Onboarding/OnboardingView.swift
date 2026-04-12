@@ -161,6 +161,7 @@ struct OnboardingView: View {
     }
 
     private func requestNotifications() {
+        Haptics.medium()
         isRequestingNotifications = true
         Task {
             let granted = await NotificationManager.shared.requestPermission()
@@ -175,6 +176,7 @@ struct OnboardingView: View {
     }
 
     private func requestPermissions() {
+        Haptics.medium()
         isRequestingPermission = true
         Task {
             do {
@@ -198,6 +200,7 @@ struct OnboardingView: View {
     }
 
     private func startMonitoring() {
+        Haptics.success()
         cloudManager.isSetupDone = true
 
         MonitoringManager.shared.restartMonitoringInBackground(priority: .userInitiated)

@@ -100,6 +100,7 @@ struct UsernameSetupView: View {
     }
 
     private func saveUsername() {
+        Haptics.medium()
         let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty && trimmed.count <= 20 else {
             showError = true

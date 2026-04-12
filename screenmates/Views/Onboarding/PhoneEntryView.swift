@@ -176,6 +176,7 @@ struct PhoneEntryView: View {
                 .disabled(code.count < 6 || isLoading)
 
                 Button("Use a different number") {
+                    Haptics.soft()
                     code = ""
                     step = .phone
                 }
@@ -196,6 +197,7 @@ struct PhoneEntryView: View {
     // MARK: - Actions
 
     private func sendCode() {
+        Haptics.medium()
         guard let e164 = PhoneAuthManager.normalizeToE164(phoneNumber) else { return }
         pendingE164 = e164
         isLoading = true
@@ -224,6 +226,7 @@ struct PhoneEntryView: View {
     }
 
     private func verifyCode() {
+        Haptics.medium()
         isLoading = true
         statusMessage = ""
 
