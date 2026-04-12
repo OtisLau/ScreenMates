@@ -49,7 +49,7 @@ class NotificationManager {
     // Fires when any friend exceeds their own personal limit.
     // Skips members whose limit is 0 (no limit set).
     private func scheduleOverLimitNotifications(members: [MemberData]) {
-        let today = todayString()
+        let today = dayBucketString()
 
         for member in members {
             let limit = member.personalGoalMinutes
@@ -83,7 +83,7 @@ class NotificationManager {
 
     // Pick the worst offender across all friends who have a limit and are 1h+ over it.
     private func scheduleEndOfDaySummary(members: [MemberData]) {
-        let today = todayString()
+        let today = dayBucketString()
         let dedupKey = "endOfDay-\(today)"
         guard !hasAlreadySent(key: dedupKey) else { return }
 
@@ -111,7 +111,7 @@ class NotificationManager {
     // MARK: - Scenario 3: Morning Doom Scroll (9:30 AM)
 
     private func scheduleMorningDoomScroll(members: [MemberData]) {
-        let today = todayString()
+        let today = dayBucketString()
         let now = Date()
 
         let minBlocks = max(1, Int(ceil(90.0 / Double(AppConstants.currentBlockSize))))
@@ -161,12 +161,8 @@ class NotificationManager {
 
     // MARK: - Deduplication
 
-    private func todayString() -> String {
-        let components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-        let year  = components.year  ?? 0
-        let month = components.month ?? 0
-        let day   = components.day   ?? 0
-        return String(format: "%04d-%02d-%02d", year, month, day)
+    private func dayBucketString(date: Date = Date()) -> String {
+        String(Int(date.timeIntervalSince1970) / 86_400)
     }
 
     private func hasAlreadySent(key: String) -> Bool {
@@ -178,14 +174,15 @@ class NotificationManager {
         var sent = UserDefaults.standard.stringArray(forKey: AppConstants.Keys.notificationsSentToday) ?? []
         sent.append(key)
         UserDefaults.standard.set(sent, forKey: AppConstants.Keys.notificationsSentToday)
-        UserDefaults.standard.set(todayString(), forKey: AppConstants.Keys.notificationsSentDate)
+        UserDefaults.standard.set(dayBucketString(), forKey: AppConstants.Keys.notificationsSentDate)
     }
 
     private func cleanupSentKeysIfNewDay() {
+        let today = dayBucketString()
         let lastDate = UserDefaults.standard.string(forKey: AppConstants.Keys.notificationsSentDate) ?? ""
-        if lastDate != todayString() {
+        if lastDate != today {
             UserDefaults.standard.removeObject(forKey: AppConstants.Keys.notificationsSentToday)
-            UserDefaults.standard.set(todayString(), forKey: AppConstants.Keys.notificationsSentDate)
+            UserDefaults.standard.set(today, forKey: AppConstants.Keys.notificationsSentDate)
         }
     }
 }
