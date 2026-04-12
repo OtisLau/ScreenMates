@@ -87,9 +87,6 @@ class NotificationManager {
         let dedupKey = "endOfDay-\(today)"
         guard !hasAlreadySent(key: dedupKey) else { return }
 
-        let hour = Calendar.current.component(.hour, from: Date())
-        guard hour >= 22 else { return }
-
         let overBy60 = members.filter { m in
             m.personalGoalMinutes > 0 && m.minutesUsed >= m.personalGoalMinutes + 60
         }
@@ -105,7 +102,8 @@ class NotificationManager {
         content.body = copy.body
         content.sound = .default
 
-        let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: nil)
+        let trigger = calendarTriggerForToday(hour: 22, minute: 0)
+        let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: trigger)
         addNotificationRequest(request)
         markSent(key: dedupKey)
     }
@@ -114,8 +112,7 @@ class NotificationManager {
 
     private func scheduleMorningDoomScroll(members: [MemberData]) {
         let today = todayString()
-        let hour = Calendar.current.component(.hour, from: Date())
-        guard hour >= 6 && hour < 12 else { return }
+        let now = Date()
 
         let minBlocks = max(1, Int(ceil(90.0 / Double(AppConstants.currentBlockSize))))
         let doomScrollers = members.filter { $0.postMidnightBlocks >= minBlocks }
@@ -135,16 +132,8 @@ class NotificationManager {
             content.body = copy.body
             content.sound = .default
 
-            let minute = Calendar.current.component(.minute, from: Date())
-            let trigger: UNNotificationTrigger?
-            if hour < 9 || (hour == 9 && minute < 30) {
-                var dateComponents = DateComponents()
-                dateComponents.hour = 9
-                dateComponents.minute = 30
-                trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
-            } else {
-                trigger = nil
-            }
+            let trigger = calendarTriggerForToday(hour: 9, minute: 30, now: now)
+            guard trigger != nil || Calendar.current.component(.hour, from: now) < 12 else { continue }
 
             let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: trigger)
             addNotificationRequest(request)
@@ -155,6 +144,19 @@ class NotificationManager {
     @MainActor
     private func addNotificationRequest(_ request: UNNotificationRequest) {
         UNUserNotificationCenter.current().add(request)
+    }
+
+    private func calendarTriggerForToday(hour: Int, minute: Int, now: Date = Date()) -> UNCalendarNotificationTrigger? {
+        let calendar = Calendar.current
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: now)
+        dateComponents.calendar = calendar
+        dateComponents.timeZone = calendar.timeZone
+        dateComponents.hour = hour
+        dateComponents.minute = minute
+        dateComponents.second = 0
+
+        guard let fireDate = calendar.date(from: dateComponents), fireDate > now else { return nil }
+        return UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
     }
 
     // MARK: - Deduplication
