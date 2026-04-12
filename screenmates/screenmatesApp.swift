@@ -15,9 +15,16 @@ struct ScreenMatesApp: App {
                     scheduleBackgroundRefresh()
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    guard phase == .active, cloudManager.isSetupDone else { return }
-                    ensureMonitoringActive(context: "foreground")
-                    Task { await cloudManager.registerFriendRequestSubscription() }
+                    switch phase {
+                    case .active:
+                        guard cloudManager.isSetupDone else { return }
+                        ensureMonitoringActive(context: "foreground")
+                        Task { await cloudManager.registerFriendRequestSubscription() }
+                    case .background:
+                        scheduleBackgroundRefresh()
+                    default:
+                        break
+                    }
                 }
         }
         .backgroundTask(.appRefresh(AppConstants.backgroundTaskIdentifier)) {
