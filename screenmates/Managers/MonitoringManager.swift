@@ -22,6 +22,7 @@ nonisolated class MonitoringManager {
         guard !Calendar.current.isDate(lastBlockDate, inSameDayAs: now) else { return false }
 
         sharedDefaults.set(0, forKey: AppConstants.Keys.dailyBlocksUsed)
+        sharedDefaults.set(0, forKey: AppConstants.Keys.postMidnightBlocksUsed)
         sharedDefaults.set(0, forKey: AppConstants.Keys.lastThresholdIndex)
         sharedDefaults.set(0, forKey: AppConstants.Keys.lastAutoBatchRolloverIndex)
         sharedDefaults.set(now, forKey: AppConstants.Keys.lastBlockDate)
