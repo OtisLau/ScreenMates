@@ -57,6 +57,7 @@ class CloudKitManager: ObservableObject {
     // Reusable encoder/decoder — avoids repeated allocation on every cache read/write
     private static let jsonEncoder = JSONEncoder()
     private static let jsonDecoder = JSONDecoder()
+    private static let friendRequestSubscriptionRetryInterval: TimeInterval = 60 * 60
 
     // Throttle widget timeline reloads to avoid OOM-killing the widget process.
     private var lastWidgetReload: Date = .distantPast
@@ -731,6 +732,13 @@ class CloudKitManager: ObservableObject {
 
         let flagKey = "friendRequestSubRegistered-\(myID)"
         guard !UserDefaults.standard.bool(forKey: flagKey) else { return }
+        let attemptKey = "friendRequestSubLastAttempt-\(myID)"
+        let now = Date()
+        if let lastAttempt = UserDefaults.standard.object(forKey: attemptKey) as? Date,
+           now.timeIntervalSince(lastAttempt) < Self.friendRequestSubscriptionRetryInterval {
+            return
+        }
+        UserDefaults.standard.set(now, forKey: attemptKey)
 
         let predicate = NSPredicate(
             format: "recipient_user_id == %@ AND status == 'pending'",
