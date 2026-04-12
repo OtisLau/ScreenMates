@@ -68,7 +68,7 @@ struct PhoneEntryView: View {
                 }
 
                 HStack(spacing: 10) {
-                    Text("🇺🇸 +1")
+                    Text("+1")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.secondary)
 
