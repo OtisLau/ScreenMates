@@ -92,9 +92,7 @@ class NotificationManager {
         let overBy60 = members.filter { m in
             m.personalGoalMinutes > 0 && m.minutesUsed >= m.personalGoalMinutes + 60
         }
-        guard !overBy60.isEmpty else { return }
-
-        let worst = overBy60.max(by: { $0.minutesUsed < $1.minutesUsed })!
+        guard let worst = overBy60.max(by: { $0.minutesUsed < $1.minutesUsed }) else { return }
         let copy = NotificationCopy.randomEndOfDay(
             name: worst.displayName,
             usedMinutes: worst.minutesUsed,
