@@ -23,6 +23,7 @@ struct ScreenMatesApp: App {
         .backgroundTask(.appRefresh(AppConstants.backgroundTaskIdentifier)) {
             print(" Background task triggered at \(Date())")
             await MainActor.run { ensureMonitoringActive(context: "background") }
+            await cloudManager.registerFriendRequestSubscription()
 
             let result = await cloudManager.performBackgroundCheckDetailed()
 
