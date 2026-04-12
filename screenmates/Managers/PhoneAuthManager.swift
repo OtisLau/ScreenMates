@@ -144,7 +144,7 @@ struct PhoneAuthProxyClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(AppConstants.phoneAuthWorkerSecret, forHTTPHeaderField: "X-App-Secret")
+        request.setValue(Secrets.phoneAuthWorkerSecret, forHTTPHeaderField: "X-App-Secret")
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, urlResponse) = try await URLSession.shared.data(for: request)

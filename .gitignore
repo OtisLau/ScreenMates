@@ -62,6 +62,9 @@ Thumbs.db
 .env.development
 .env.production
 
+# Secrets
+screenmates/Secrets.swift
+
 # Logs
 *.log
 
