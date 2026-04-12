@@ -102,7 +102,7 @@ class NotificationManager {
         content.body = copy.body
         content.sound = .default
 
-        let trigger = calendarTriggerForToday(hour: 22, minute: 0)
+        guard let trigger = calendarTriggerForToday(hour: 22, minute: 0) else { return }
         let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: trigger)
         addNotificationRequest(request)
         markSent(key: dedupKey)
@@ -132,8 +132,7 @@ class NotificationManager {
             content.body = copy.body
             content.sound = .default
 
-            let trigger = calendarTriggerForToday(hour: 9, minute: 30, now: now)
-            guard trigger != nil || Calendar.current.component(.hour, from: now) < 12 else { continue }
+            guard let trigger = calendarTriggerForToday(hour: 9, minute: 30, now: now) else { continue }
 
             let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: trigger)
             addNotificationRequest(request)
