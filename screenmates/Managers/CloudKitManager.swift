@@ -896,13 +896,13 @@ class CloudKitManager: ObservableObject {
         let now = Date()
         if forceWidgetReload {
             lastWidgetReload = now
-            WidgetCenter.shared.reloadTimelines(ofKind: "ScreenMatesGroupWidget")
+            WidgetCenter.shared.reloadTimelines(ofKind: AppConstants.groupWidgetKind)
             return
         }
         let throttle = isForeground ? widgetReloadThrottleForeground : widgetReloadThrottleBackground
         if now.timeIntervalSince(lastWidgetReload) >= throttle {
             lastWidgetReload = now
-            WidgetCenter.shared.reloadTimelines(ofKind: "ScreenMatesGroupWidget")
+            WidgetCenter.shared.reloadTimelines(ofKind: AppConstants.groupWidgetKind)
         }
         #endif
     }

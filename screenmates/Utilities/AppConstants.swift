@@ -37,6 +37,9 @@ nonisolated struct AppConstants {
     // Force DeviceActivity to monitor all activity regardless of picker selection.
     static let monitorAllActivity = true
 
+    // WidgetKit kind for the group leaderboard widget.
+    static let groupWidgetKind = "ScreenMatesGroupWidget"
+
     // Absolute ceiling for thresholds/blocks in one day based on block size.
     static let maxTrackableBlocksPerDay = thresholdEventsPerDay(for: currentBlockSize)
 
