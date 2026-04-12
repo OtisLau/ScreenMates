@@ -22,6 +22,7 @@ struct ContactsPermissionView: View {
     @State private var searchDone = false
     @State private var showDeniedAlert = false
     @State private var requestErrorMessage: String?
+    @State private var failedRequestUserIDs: Set<String> = []
 
     var body: some View {
         ZStack {
@@ -52,9 +53,16 @@ struct ContactsPermissionView: View {
         }
         .alert("Friend request failed", isPresented: Binding(
             get: { requestErrorMessage != nil },
-            set: { if !$0 { requestErrorMessage = nil } }
+            set: { if !$0 { clearRequestError() } }
         )) {
-            Button("OK", role: .cancel) { requestErrorMessage = nil }
+            if !failedRequestUserIDs.isEmpty {
+                Button("Retry") {
+                    selectedUserIDs = failedRequestUserIDs
+                    clearRequestError()
+                    Task { await continueFromMatches() }
+                }
+            }
+            Button("OK", role: .cancel) { clearRequestError() }
         } message: {
             Text(requestErrorMessage ?? "Something went wrong.")
         }
@@ -333,34 +341,57 @@ struct ContactsPermissionView: View {
         defer { isSendingRequests = false }
 
         let selectedMatches = matches.filter { selectedUserIDs.contains($0.userID) }
-        do {
-            for match in selectedMatches {
-                do {
-                    try await CloudKitManager.shared.sendFriendRequest(toUserID: match.userID)
-                    let acceptedIncomingRequest = try await CloudKitManager.shared.acceptPendingIncomingFriendRequest(fromUserID: match.userID)
-                    if acceptedIncomingRequest {
-                        removeLocalPendingFriend(userID: match.userID)
-                    } else {
-                        markLocalPendingFriend(userID: match.userID, displayName: match.displayName)
-                    }
-                } catch CloudKitManager.FriendError.alreadyExists {
-                    let acceptedIncomingRequest = try await CloudKitManager.shared.acceptPendingIncomingFriendRequest(fromUserID: match.userID)
-                    if acceptedIncomingRequest {
-                        removeLocalPendingFriend(userID: match.userID)
-                    } else if try await CloudKitManager.shared.hasAcceptedFriendship(withUserID: match.userID) {
-                        removeLocalPendingFriend(userID: match.userID)
-                    } else {
-                        markLocalPendingFriend(userID: match.userID, displayName: match.displayName)
-                    }
-                }
+        var handledCount = 0
+        var failedMatches: [ContactMatch] = []
+
+        for match in selectedMatches {
+            do {
+                try await sendOrResolveFriendRequest(for: match)
+                handledCount += 1
+            } catch {
+                failedMatches.append(match)
+                print("Friend request failed for \(match.userID): \(error.localizedDescription)")
             }
-            await CloudKitManager.shared.fetchPendingRequests()
-            await CloudKitManager.shared.fetchOutgoingPendingRequests()
-            await CloudKitManager.shared.refreshFriendsNow(reason: "onboarding-contacts")
-            auth.markContactsHandled()
-        } catch {
-            requestErrorMessage = error.localizedDescription
         }
+
+        await CloudKitManager.shared.fetchPendingRequests()
+        await CloudKitManager.shared.fetchOutgoingPendingRequests()
+        await CloudKitManager.shared.refreshFriendsNow(reason: "onboarding-contacts")
+
+        if failedMatches.isEmpty {
+            auth.markContactsHandled()
+            failedRequestUserIDs = []
+        } else {
+            failedRequestUserIDs = Set(failedMatches.map(\.userID))
+            selectedUserIDs = failedRequestUserIDs
+            requestErrorMessage = "\(handledCount) request\(handledCount == 1 ? "" : "s") handled, \(failedMatches.count) failed. Try again when your connection is back."
+        }
+    }
+
+    private func sendOrResolveFriendRequest(for match: ContactMatch) async throws {
+        do {
+            try await CloudKitManager.shared.sendFriendRequest(toUserID: match.userID)
+            let acceptedIncomingRequest = try await CloudKitManager.shared.acceptPendingIncomingFriendRequest(fromUserID: match.userID)
+            if acceptedIncomingRequest {
+                removeLocalPendingFriend(userID: match.userID)
+            } else {
+                markLocalPendingFriend(userID: match.userID, displayName: match.displayName)
+            }
+        } catch CloudKitManager.FriendError.alreadyExists {
+            let acceptedIncomingRequest = try await CloudKitManager.shared.acceptPendingIncomingFriendRequest(fromUserID: match.userID)
+            if acceptedIncomingRequest {
+                removeLocalPendingFriend(userID: match.userID)
+            } else if try await CloudKitManager.shared.hasAcceptedFriendship(withUserID: match.userID) {
+                removeLocalPendingFriend(userID: match.userID)
+            } else {
+                markLocalPendingFriend(userID: match.userID, displayName: match.displayName)
+            }
+        }
+    }
+
+    private func clearRequestError() {
+        requestErrorMessage = nil
+        failedRequestUserIDs = []
     }
 
     private func markLocalPendingFriend(userID: String, displayName: String) {
