@@ -1,6 +1,7 @@
 import Foundation
 import UserNotifications
 
+@MainActor
 class NotificationManager {
     static let shared = NotificationManager()
     private init() {
@@ -73,7 +74,7 @@ class NotificationManager {
                 content: content,
                 trigger: nil
             )
-            UNUserNotificationCenter.current().add(request)
+            addNotificationRequest(request)
             markSent(key: dedupKey)
         }
     }
@@ -105,7 +106,7 @@ class NotificationManager {
         content.sound = .default
 
         let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+        addNotificationRequest(request)
         markSent(key: dedupKey)
     }
 
@@ -146,9 +147,14 @@ class NotificationManager {
             }
 
             let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(request)
+            addNotificationRequest(request)
             markSent(key: dedupKey)
         }
+    }
+
+    @MainActor
+    private func addNotificationRequest(_ request: UNNotificationRequest) {
+        UNUserNotificationCenter.current().add(request)
     }
 
     // MARK: - Deduplication
