@@ -65,6 +65,9 @@ Thumbs.db
 # Secrets
 screenmates/Secrets.swift
 
+# Wrangler
+screenmates/.wrangler/
+
 # Logs
 *.log
 
