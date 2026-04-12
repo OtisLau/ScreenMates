@@ -21,12 +21,6 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         return max(((24 * 60) - 1 + blockSize - 1) / blockSize, 1)
     }
 
-    private var utcCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
-        return calendar
-    }
-
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
 
@@ -73,8 +67,8 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let previousBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
         let currentBlocks = min(max(thresholdIndex, previousBlocks), maxTrackableBlocksPerDay)
 
-        // Track post-midnight usage (12AM–4AM) for notifications.
-        let hour = utcCalendar.component(.hour, from: now)
+        // Track post-midnight usage (12AM–4AM local) for notifications.
+        let hour = Calendar.current.component(.hour, from: now)
         if hour < 4 && currentBlocks > previousBlocks {
             let postMidnight = sharedDefaults.integer(forKey: "PostMidnightBlocksUsed")
             sharedDefaults.set(postMidnight + 1, forKey: "PostMidnightBlocksUsed")
