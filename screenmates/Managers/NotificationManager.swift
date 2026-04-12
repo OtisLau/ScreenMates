@@ -38,9 +38,9 @@ class NotificationManager {
         Task {
             guard await isAuthorized else { return }
             cleanupSentKeysIfNewDay()
-            scheduleOverLimitNotifications(members: members)
-            scheduleEndOfDaySummary(members: members)
-            scheduleMorningDoomScroll(members: members)
+            await scheduleOverLimitNotifications(members: members)
+            await scheduleEndOfDaySummary(members: members)
+            await scheduleMorningDoomScroll(members: members)
         }
     }
 
@@ -48,7 +48,7 @@ class NotificationManager {
 
     // Fires when any friend exceeds their own personal limit.
     // Skips members whose limit is 0 (no limit set).
-    private func scheduleOverLimitNotifications(members: [MemberData]) {
+    private func scheduleOverLimitNotifications(members: [MemberData]) async {
         let today = dayBucketString()
 
         for member in members {
@@ -74,15 +74,16 @@ class NotificationManager {
                 content: content,
                 trigger: nil
             )
-            addNotificationRequest(request)
-            markSent(key: dedupKey)
+            if await addNotificationRequest(request) {
+                markSent(key: dedupKey)
+            }
         }
     }
 
     // MARK: - Scenario 2: End of Day Summary (10 PM)
 
     // Pick the worst offender across all friends who have a limit and are 1h+ over it.
-    private func scheduleEndOfDaySummary(members: [MemberData]) {
+    private func scheduleEndOfDaySummary(members: [MemberData]) async {
         let today = dayBucketString()
         let dedupKey = "endOfDay-\(today)"
         guard !hasAlreadySent(key: dedupKey) else { return }
@@ -104,13 +105,14 @@ class NotificationManager {
 
         guard let trigger = calendarTriggerForToday(hour: 22, minute: 0) else { return }
         let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: trigger)
-        addNotificationRequest(request)
-        markSent(key: dedupKey)
+        if await addNotificationRequest(request) {
+            markSent(key: dedupKey)
+        }
     }
 
     // MARK: - Scenario 3: Morning Doom Scroll (9:30 AM)
 
-    private func scheduleMorningDoomScroll(members: [MemberData]) {
+    private func scheduleMorningDoomScroll(members: [MemberData]) async {
         let today = dayBucketString()
         let now = Date()
 
@@ -135,14 +137,21 @@ class NotificationManager {
             guard let trigger = calendarTriggerForToday(hour: 9, minute: 30, now: now) else { continue }
 
             let request = UNNotificationRequest(identifier: dedupKey, content: content, trigger: trigger)
-            addNotificationRequest(request)
-            markSent(key: dedupKey)
+            if await addNotificationRequest(request) {
+                markSent(key: dedupKey)
+            }
         }
     }
 
     @MainActor
-    private func addNotificationRequest(_ request: UNNotificationRequest) {
-        UNUserNotificationCenter.current().add(request)
+    private func addNotificationRequest(_ request: UNNotificationRequest) async -> Bool {
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+            return true
+        } catch {
+            print("Notification add failed (\(request.identifier)): \(error.localizedDescription)")
+            return false
+        }
     }
 
     private func calendarTriggerForToday(hour: Int, minute: Int, now: Date = Date()) -> UNCalendarNotificationTrigger? {
