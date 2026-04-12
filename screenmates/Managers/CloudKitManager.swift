@@ -721,6 +721,60 @@ class CloudKitManager: ObservableObject {
         }
     }
 
+    // MARK: - Friend Request Push Subscription
+
+    // Registers a CloudKit subscription that fires a silent push whenever someone
+    // sends this user a friend request. Guarded by a UserDefaults flag so it only
+    // saves to CloudKit once per user ID — subsequent calls are instant no-ops.
+    func registerFriendRequestSubscription() async {
+        guard !myID.isEmpty else { return }
+
+        let flagKey = "friendRequestSubRegistered-\(myID)"
+        guard !UserDefaults.standard.bool(forKey: flagKey) else { return }
+
+        let predicate = NSPredicate(
+            format: "recipient_user_id == %@ AND status == 'pending'",
+            myID
+        )
+        let subscription = CKQuerySubscription(
+            recordType: "Friendship",
+            predicate: predicate,
+            subscriptionID: "friend-request-incoming-\(myID)",
+            options: .firesOnRecordCreation
+        )
+
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true   // silent push — app wakes to fire a local notification
+        info.desiredKeys = ["requester_user_id"] // include sender ID in the push payload
+        subscription.notificationInfo = info
+
+        do {
+            _ = try await database.save(subscription)
+            UserDefaults.standard.set(true, forKey: flagKey)
+        } catch {
+            print("registerFriendRequestSubscription failed: \(error)")
+        }
+    }
+
+    // Fetches the display name for a given user ID. Used by the app delegate to
+    // personalise the friend-request push notification.
+    func fetchDisplayName(forUserID userID: String) async -> String? {
+        guard !userID.isEmpty else { return nil }
+        let predicate = NSPredicate(format: "user_id == %@", userID)
+        let query = CKQuery(recordType: "UserProfile", predicate: predicate)
+        do {
+            let (results, _) = try await database.records(matching: query, resultsLimit: 1)
+            for (_, result) in results {
+                if case .success(let record) = result {
+                    return record["display_name"] as? String
+                }
+            }
+        } catch {
+            print("fetchDisplayName failed: \(error)")
+        }
+        return nil
+    }
+
     // MARK: - Duplicate Cleanup
 
     private func cleanupMyDuplicateProfiles() async throws {
