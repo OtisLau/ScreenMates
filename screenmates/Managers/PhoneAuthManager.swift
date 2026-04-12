@@ -152,15 +152,35 @@ struct PhoneAuthProxyClient {
             throw PhoneAuthProxyError.invalidResponse
         }
 
-        let decoded = try? JSONDecoder().decode(VerificationResponse.self, from: data)
-        if !(200..<300).contains(httpResponse.statusCode) {
-            throw PhoneAuthProxyError.server(decoded?.error ?? "Phone verification failed.")
+        let responseBody = Self.responseBodyString(from: data)
+        let decoded: VerificationResponse
+        do {
+            decoded = try JSONDecoder().decode(VerificationResponse.self, from: data)
+        } catch {
+            print("Phone verification response decode failed: \(error.localizedDescription)")
+            if let responseBody {
+                print("Phone verification raw response: \(responseBody)")
+            }
+            if !(200..<300).contains(httpResponse.statusCode) {
+                throw PhoneAuthProxyError.server(responseBody ?? "Phone verification failed.")
+            }
+            throw PhoneAuthProxyError.invalidResponse
         }
 
-        guard let decoded else { throw PhoneAuthProxyError.invalidResponse }
+        if !(200..<300).contains(httpResponse.statusCode) {
+            throw PhoneAuthProxyError.server(decoded.error ?? responseBody ?? "Phone verification failed.")
+        }
+
         if decoded.ok == false {
-            throw PhoneAuthProxyError.server(decoded.error ?? "Phone verification failed.")
+            throw PhoneAuthProxyError.server(decoded.error ?? responseBody ?? "Phone verification failed.")
         }
         return decoded
+    }
+
+    private static func responseBodyString(from data: Data) -> String? {
+        let body = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let body, !body.isEmpty else { return nil }
+        return body
     }
 }
