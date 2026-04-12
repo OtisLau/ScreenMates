@@ -34,7 +34,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                     content: content,
                     trigger: nil
                 )
-                try? await UNUserNotificationCenter.current().add(request)
+                do {
+                    try await UNUserNotificationCenter.current().add(request)
+                } catch {
+                    print("Friend request notification add failed: \(error.localizedDescription)")
+                }
                 await CloudKitManager.shared.refreshGroupNow(reason: "friend-request-push")
             }
             completionHandler(.newData)
@@ -48,4 +52,3 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         completionHandler(.newData)
     }
 }
-
