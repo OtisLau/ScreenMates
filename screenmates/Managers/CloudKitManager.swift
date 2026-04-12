@@ -755,7 +755,6 @@ class CloudKitManager: ObservableObject {
                     defaults.removeObject(forKey: attemptKey)
                     print("Friend request subscription missing; re-registering")
                 } else {
-                    defaults.set(now, forKey: validationKey)
                     print("Friend request subscription validation failed: \(error)")
                     return
                 }
