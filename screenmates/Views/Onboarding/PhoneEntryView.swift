@@ -73,10 +73,13 @@ struct PhoneEntryView: View {
                         .foregroundStyle(.secondary)
 
                     TextField("", text: $phoneNumber,
-                              prompt: Text("(555) 867-5309").foregroundColor(.secondary))
+                              prompt: Text("555-867-5309").foregroundColor(.secondary))
                         .font(.system(size: 22, weight: .semibold))
                         .keyboardType(.phonePad)
                         .focused($isFocused)
+                        .onChange(of: phoneNumber) { _, new in
+                            phoneNumber = formatPhoneInput(new)
+                        }
                 }
                 .padding(.vertical, 18)
                 .padding(.horizontal, 20)
@@ -287,6 +290,15 @@ struct PhoneEntryView: View {
     }
 
     // MARK: - Helpers
+
+    private func formatPhoneInput(_ input: String) -> String {
+        let digits = String(input.filter { $0.isNumber }.prefix(10))
+        switch digits.count {
+        case 0...3: return digits
+        case 4...6: return "\(digits.prefix(3))-\(digits.dropFirst(3))"
+        default:    return "\(digits.prefix(3))-\(digits.dropFirst(3).prefix(3))-\(digits.dropFirst(6))"
+        }
+    }
 
     private func formattedPhone(_ e164: String) -> String {
         let d = e164.filter { $0.isNumber }
