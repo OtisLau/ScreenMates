@@ -1,12 +1,9 @@
 import SwiftUI
-import Combine
 
 struct DashboardView: View {
     @ObservedObject var cloudManager = CloudKitManager.shared
     @State private var showingSettings = false
     @State private var showingFriends  = false
-
-    let timer = Timer.publish(every: AppConstants.dashboardRefreshInterval, on: .main, in: .common).autoconnect()
 
     private var myMinutesUsed: Int {
         cloudManager.currentBlocksUsed * AppConstants.currentBlockSize
@@ -135,13 +132,11 @@ struct DashboardView: View {
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }
-            .onAppear {
-                Task { @MainActor in
-                    await cloudManager.refreshFriendsNow(reason: "appear")
-                }
-            }
-            .onReceive(timer) { _ in
-                Task { @MainActor in
+            .task {
+                await cloudManager.refreshFriendsNow(reason: "appear")
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(AppConstants.dashboardRefreshInterval))
+                    guard !Task.isCancelled else { break }
                     await cloudManager.refreshFriendsNow(reason: "timer")
                 }
             }

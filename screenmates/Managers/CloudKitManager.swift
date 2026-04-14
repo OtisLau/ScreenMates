@@ -248,6 +248,7 @@ class CloudKitManager: ObservableObject {
     @MainActor
     func refreshFriendsNow(reason: String? = nil) async {
         guard !myID.isEmpty else { return }
+        guard !isLoading else { return }
         print("Refreshing friends leaderboard (\(reason ?? ""))")
 
         isLoading = true
