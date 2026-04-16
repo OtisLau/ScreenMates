@@ -72,8 +72,11 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             return
         }
 
+        // Each passed-through threshold == one more block. Using max(thresholdIndex, previousBlocks)
+        // stalled the count for hours after a batch rollover, because the new batch restarts at
+        // block_1 while previousBlocks is already ~96. The dedup guard above keeps this increment-only.
         let previousBlocks = sharedDefaults.integer(forKey: "DailyBlocksUsed")
-        let currentBlocks = min(max(thresholdIndex, previousBlocks), maxTrackableBlocksPerDay)
+        let currentBlocks = min(previousBlocks + 1, maxTrackableBlocksPerDay)
 
         // Track post-midnight usage (12AM–4AM local) for notifications.
         let hour = Calendar.current.component(.hour, from: now)
