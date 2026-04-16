@@ -38,14 +38,19 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     }
 
     private func processThresholdEvent(_ event: DeviceActivityEvent.Name, sharedDefaults: UserDefaults) {
-        // Ignore events from yesterday's schedule — app will restart monitoring on next wake.
+        let now = Date()
         let lastBlockDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? .distantPast
-        guard Calendar.current.isDateInToday(lastBlockDate) else {
-            print("Ignoring stale threshold from previous day's schedule")
-            return
+
+        // Self-heal day rollover: if the stored day has rolled over, zero the counters
+        // right here rather than waiting for the app to wake. Otherwise every threshold
+        // from midnight until the app next runs would be dropped, losing hours of tracking.
+        if !Calendar.current.isDate(lastBlockDate, inSameDayAs: now) {
+            sharedDefaults.set(0, forKey: "DailyBlocksUsed")
+            sharedDefaults.set(0, forKey: "PostMidnightBlocksUsed")
+            sharedDefaults.set(0, forKey: lastThresholdIndexKey)
+            sharedDefaults.set(0, forKey: "LastAutoBatchRolloverIndex")
         }
 
-        let now = Date()
         let thresholdIndex = parseThresholdIndex(from: event.rawValue) ?? 0
         let lastIndex = sharedDefaults.integer(forKey: lastThresholdIndexKey)
 
