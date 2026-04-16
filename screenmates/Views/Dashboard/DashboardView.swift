@@ -99,20 +99,19 @@ struct DashboardView: View {
                     Button {
                         showingFriends = true
                     } label: {
-                        Image(systemName: "person.2.fill")
-                            .overlay(alignment: .topTrailing) {
-                                if cloudManager.pendingRequests.count > 0 {
-                                    Circle()
-                                        .fill(Color.red)
-                                        .frame(width: 9, height: 9)
-                                        .overlay {
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 1.5)
-                                        }
-                                        .offset(x: 2, y: -2)
-                                        .accessibilityHidden(true)
-                                }
+                        let pendingCount = cloudManager.pendingRequests.count
+                        if pendingCount > 0 {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 22, height: 22)
+                                Text("\(pendingCount)")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.white)
                             }
+                        } else {
+                            Image(systemName: "person.2.fill")
+                        }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(friendsButtonAccessibilityLabel)
