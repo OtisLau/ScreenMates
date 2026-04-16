@@ -2,6 +2,9 @@ import DeviceActivity
 import ManagedSettings
 import Foundation
 import Darwin
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
@@ -124,8 +127,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         var postMidnightBlocks: Int?
     }
 
-    // Updates the current user's row in the leaderboard cache.
-    // The extension only writes — it does NOT call reloadAllTimelines() to avoid OOM races.
+    // Updates the current user's row in the leaderboard cache and pokes the widget to refresh.
+    // reloadTimelines is an IPC to widgetd — the widget process does the rendering, so the
+    // extension's 6MB budget isn't on the hook for any view work.
     private func updateWidgetCache(sharedDefaults: UserDefaults, currentBlocks: Int) {
         guard
             let userID      = sharedDefaults.string(forKey: "SharedMyUserID"), !userID.isEmpty,
@@ -156,6 +160,10 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         if let encoded = try? JSONEncoder().encode(members) {
             sharedDefaults.set(encoded, forKey: cacheKey)
         }
+
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadTimelines(ofKind: "ScreenMatesGroupWidget")
+        #endif
     }
 
     private func parseThresholdIndex(from raw: String) -> Int? {
