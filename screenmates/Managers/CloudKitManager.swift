@@ -88,6 +88,23 @@ class CloudKitManager: ObservableObject {
         myPersonalGoalMinutes = UserDefaults.standard.integer(forKey: AppConstants.Keys.myPersonalGoalMinutes)
         loadCachedData()
         mirrorIdentityToAppGroup()
+        registerExtensionBlocksObserver()
+    }
+
+    // Listen for Darwin notifications from the DeviceActivityMonitor extension.
+    // When the extension counts a new block it posts this notification so we upload
+    // immediately instead of waiting for the next dashboard timer tick.
+    private func registerExtensionBlocksObserver() {
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            nil,
+            { _, _, _, _, _ in
+                CloudKitManager.shared.updateMyProfile(completion: nil)
+            },
+            AppConstants.extensionBlocksUpdatedNotification as CFString,
+            nil,
+            .deliverImmediately
+        )
     }
 
     private func mirrorIdentityToAppGroup() {

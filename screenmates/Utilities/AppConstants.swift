@@ -54,6 +54,10 @@ nonisolated struct AppConstants {
     static let backgroundTaskIdentifier = "com.otishlau.screenmates.refresh"
     static let backgroundTaskInterval: TimeInterval = 15 * 60
 
+    // Darwin notification posted by the extension after counting a new block.
+    // The main app observes this to trigger an immediate CloudKit upload.
+    static let extensionBlocksUpdatedNotification = "com.otishlau.screenmates.blocksUpdated"
+
     // MARK: - UserDefaults Keys
     struct Keys {
         static let dailyBlocksUsed       = "DailyBlocksUsed"

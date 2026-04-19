@@ -35,12 +35,25 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         sharedDefaults.set(Date(), forKey: "LastExtensionWakeDate")
         sharedDefaults.set(event.rawValue, forKey: "LastExtensionWakeEvent")
 
+        var didCountBlock = false
         withSharedStateLock {
-            processThresholdEvent(event, sharedDefaults: sharedDefaults)
+            didCountBlock = processThresholdEvent(event, sharedDefaults: sharedDefaults)
+        }
+
+        if didCountBlock {
+            // Nudge the main app to upload the new count to CloudKit immediately.
+            // Zero memory cost — CoreFoundation is already loaded. The app reads the
+            // count from shared UserDefaults; no payload needed here.
+            CFNotificationCenterPostNotification(
+                CFNotificationCenterGetDarwinNotifyCenter(),
+                CFNotificationName("com.otishlau.screenmates.blocksUpdated" as CFString),
+                nil, nil, true
+            )
         }
     }
 
-    private func processThresholdEvent(_ event: DeviceActivityEvent.Name, sharedDefaults: UserDefaults) {
+    // Returns true if a block was counted, false if rate-limited or deduped.
+    private func processThresholdEvent(_ event: DeviceActivityEvent.Name, sharedDefaults: UserDefaults) -> Bool {
         let now = Date()
         let lastBlockDate = sharedDefaults.object(forKey: "LastBlockDate") as? Date ?? .distantPast
 
@@ -58,7 +71,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let lastIndex = sharedDefaults.integer(forKey: lastThresholdIndexKey)
 
         // Deduplicate and track position for batch-exhaustion detection by the main app.
-        guard thresholdIndex > lastIndex else { return }
+        guard thresholdIndex > lastIndex else { return false }
         sharedDefaults.set(thresholdIndex, forKey: lastThresholdIndexKey)
 
         // Wall-clock rate limit: only count a block if enough real time has elapsed since
@@ -69,7 +82,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         let elapsed = now.timeIntervalSince(lastBlockDate)
         guard elapsed >= blockSizeSeconds else {
             print("Rate limited: \(Int(elapsed))s since last block (need \(blockSize * 60)s)")
-            return
+            return false
         }
 
         // Each passed-through threshold == one more block. Using max(thresholdIndex, previousBlocks)
@@ -93,6 +106,7 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         print("Threshold hit. Daily total: \(currentBlocks) blocks")
 
         updateWidgetCache(sharedDefaults: sharedDefaults, currentBlocks: currentBlocks)
+        return true
     }
 
     private func withSharedStateLock(_ body: () -> Void) {
